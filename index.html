@@ -514,33 +514,43 @@
                                 <div style="height: 120px; background: linear-gradient(45deg, #1a1a2e, #16213e); border-radius: 8px; margin-top: 0.5rem; display: flex; align-items: center; justify-content: center; color: #00ffff;">
                                     USB
                                 </div>
-                       <pre>    
-    source: {
-TYPE: "usb",
-PROTOCOL: "USB Audio Class 2.0",
-ENDPOINT: "vid_0d8c:pid_0014",
-VENDOR: "Марка производителя"
-            }
+<!--<pre>     source: {
+TYPE: string;
+PROTOCOL: string;
+ENDPOINT: string;
+VENDOR: string;
+         }
     capabilities: {
 SUPPORTEDPROTOCOLS: [
-"RTSP/ONVIF", "Modbus TCP", "BACnet", "CAN Bus", 
-"OPC UA", "Bluetooth GATT", "Zigbee", "LoRaWAN"
-        ]
+"RTSP/ONVIF","MQTT","OPC UA",
+"BACnet","CAN Bus","Modbus TCP", 
+"Bluetooth GATT", 
+"Zigbee","LoRaWAN"
+     ]
          }
     data: {
 FORMAT: "Octoceph",
 SAMPLERATE: 48000,
 PAYLOAD: new Float32Array([PCM данные])
-         }</pre>
+    }</pre>-->
                             </div>
                         </div>
                         <div style="background: rgba(0, 255, 255, 0.1); border-radius: 10px; padding: 1rem; margin-top: 1rem;">
-                            <h4 style="color: #00ffff; margin-bottom: 0.5rem;">РЕЗУЛЬТАТЫ СКАНИРОВАНИЯ ИСТОЧНИКОВ</h4>
-                            <div style="color: #cccccc;">7 IP CAMERA DEVICES (192.168.1.100-101, 192.168.1.100-102, 192.168.1.100-103, 192.168.1.100-104) <br>
-                                                         8 USB DEVICES (ID: 1 , ID: 2 , ID: 3 , ID: 4 ...)          
-                                                         </div>
+                            <h4 style="color: #00ffff; margin-bottom: 0.5rem;">
+РЕЗУЛЬТАТ СКАНИРОВАНИЯ ИСТОЧНИКОВ:
+<br><b>
+WS-Discovery
+</b><br><b>
+enumerateDevices()
+</b></h4>
+                            <div style="color: #cccccc;">
+                            <code>
+7 IP CAMERA DEVICES <!--(192.168.1.100-101, 192.168.1.100-102, 192.168.1.100-103, 192.168.1.100-104)--> <br>
+8 USB DEVICES <!--(ID: 1 , ID: 2 , ID: 3 , ID: 4 ...)-->
+                            </code>     
+                         </div>
                         </div>
-                    </div>
+                      </div>
 
                     <div class="demo-screen" id="gallery">
                         <h3>Галерея изображений с временными полосами</h3>

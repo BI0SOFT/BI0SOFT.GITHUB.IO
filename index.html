@@ -490,12 +490,18 @@
                             <div class="camera-feed">
                                 <h4>WEB</h4>
                                 <div class="camera-status">🟢 Активна</div>
-                                <div style="height: 120px; background: linear-gradient(45deg, #1a1a2e, #16213e); border-radius: 8px; margin-top: 0.5rem; display: flex; align-items: center; justify-content: center; color: #00ffff;">BLUETOOTH</div>
+                                <div style="height: 120px; background: linear-gradient(45deg, #1a1a2e, #16213e); border-radius: 8px; margin-top: 0.5rem; display: flex; align-items: center; justify-content: center; color: #00ffff;">
+                                    BLUETOOTH
+                                </div>
+                            
                             </div>
                             <div class="camera-feed">
                                 <h4>IP </h4>
                                 <div class="camera-status">🟢 Подключена</div>
-                                <div style="height: 120px; background: linear-gradient(45deg, #1a1a2e, #16213e); border-radius: 8px; margin-top: 0.5rem; display: flex; align-items: center; justify-content: center; color: #00ffff;">RTSP</div>
+                                <div style="height: 120px; background: linear-gradient(45deg, #1a1a2e, #16213e); border-radius: 8px; margin-top: 0.5rem; display: flex; align-items: center; justify-content: center; color: #00ffff;">
+                                    RTSP
+                                </div>
+                            
                             </div>
                             <div class="camera-feed">
                                 <h4>IP</h4>
@@ -505,7 +511,21 @@
                             <div class="camera-feed">
                                 <h4>WEB</h4>
                                 <div class="camera-status">🟢 Активна</div>
-                                <div style="height: 120px; background: linear-gradient(45deg, #1a1a2e, #16213e); border-radius: 8px; margin-top: 0.5rem; display: flex; align-items: center; justify-content: center; color: #00ffff;">USB</div>
+                                <div style="height: 120px; background: linear-gradient(45deg, #1a1a2e, #16213e); border-radius: 8px; margin-top: 0.5rem; display: flex; align-items: center; justify-content: center; color: #00ffff;">
+                                    USB
+                                </div>
+                            <pre> source: {
+                                  TYPE: "usb",
+                                  PROTOCOL: "USB Audio Class 2.0",
+                                  ENDPOINT: "vid_0d8c:pid_0014",
+                                  VENDOR: "Марка производителя"
+                                          }
+                                    data: {
+                                  FORMAT: "pcm_f32le",
+                                  sampleRate: 48000,
+                                  payload: new Float32Array([PCM данные])
+                                          }
+                            </pre>
                             </div>
                         </div>
                         <div style="background: rgba(0, 255, 255, 0.1); border-radius: 10px; padding: 1rem; margin-top: 1rem;">
@@ -610,7 +630,7 @@
         </section>
 
         <footer class="footer">
-            <p>&copy; 2025 OctoCore. Универсальный Параметрический Cбор, Конвергенция и Анализ .</p>
+            <p>&copy; 2025 OctoCore. <br> Универсальный Параметрический Cбор → Конвергенция и Сериализация → Хранение и Анализ.</p>
             <p>СОЗДАНО С ИСПОЛЬЗОВАНИЕМ ЭКСПЕРЕМЕНТАЛЬНЫХ СПЕЦИФИКАЦИЙ.</p>
             <div class="social-links">
                 <a href="#" class="social-link">📧</a>

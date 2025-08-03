@@ -337,10 +337,9 @@
             transition: all 0.3s ease;
         }
 
-        .social-link:hover {
-            color: #ff00ff;
-            transform: scale(1.2);
-        }
+.social-link:hover {color: #ff00ff;transform: scale(1.2);}
+.element::after {content'1'; color:transparent; height:300px; width:500px; position:absolute; top:25vh; left:25vh; background-color:#ddd;}
+.element::before {content'1'; color:transparent; height:300px; width:500px; position:absolute; top:25vh; left:25vh; background-color:#ddd;}
 
         @media (max-width: 768px) {
             .header {
@@ -536,7 +535,7 @@ PAYLOAD: new Float32Array([PCM данные])
                           </div>
                         <div style="background: rgba(0, 255, 255, 0.1); border-radius: 10px; padding: 1rem; margin-top: 1rem;">
                           <h4 style="color: #00ffff; margin-bottom: 0.5rem;">
-<br><b style="color:white;">&nbsp;&nbsp;&nbsp;&nbsp;МНОГОМЕРНЫЕ МАССИВЫ ИСТОЧНИКОВ ДАННЫХ</b><br>
+<br><b class="element" style="color:white;">МНОГОМЕРНЫЕ МАССИВЫ ИСТОЧНИКОВ ДАННЫХ</b><br>
 <b style="color:white;"> ● → </b><span class="bolder">Сканирование доступного окружения</span><b style="color:white;"> → </b>
 <b class="border" style="color:white;">[ IP , USB , HASH ] ,
 [ deviceID: 

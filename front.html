@@ -6,6 +6,50 @@
   <title>OctoCore</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .grid-container {
+            display: grid;
+            /* 4 колонки с равной шириной */
+            grid-template-columns: repeat(4, 1fr);
+            /* 3 строки с равной высотой */
+            grid-template-rows: repeat(3, 1fr);
+            gap: 12px; /* Расстояние между ячейками */
+            max-width: 1200px; /* Максимальная ширина контейнера */
+            margin: 0 auto; /* Центрирование */
+            padding: 15px;
+            aspect-ratio: 4/3; /* Соотношение ширины и высоты (4:3) */
+        }
+
+        .grid-item {
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            aspect-ratio: 1/1; /* Квадратные ячейки */
+        }
+
+        /* Адаптивность для мобильных устройств */
+        @media (max-width: 768px) {
+            .grid-container {
+                /* Меняем на 2 колонки на маленьких экранах */
+                grid-template-columns: repeat(2, 1fr);
+                /* Автоматические строки */
+                grid-template-rows: auto;
+                aspect-ratio: auto;
+            }
+        }
+
+        /* Для экранов уже 480px */
+        @media (max-width: 480px) {
+            .grid-container {
+                /* Одна колонка на очень маленьких экранах */
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
   <div class="app">
@@ -110,8 +154,21 @@
       <div class="tab" data-tab="timelapses"><!--Таймлапсы--><i class="fas fa-film icn" style="letter-spacing: 0;"></i></div>
     </div>
 
-    
-
+    <!-- Cameras -->
+    <div class="grid-container">
+        <div class="grid-item">1</div>
+        <div class="grid-item">2</div>
+        <div class="grid-item">3</div>
+        <div class="grid-item">4</div>
+        <div class="grid-item">5</div>
+        <div class="grid-item">6</div>
+        <div class="grid-item">7</div>
+        <div class="grid-item">8</div>
+        <div class="grid-item">9</div>
+        <div class="grid-item">10</div>
+        <div class="grid-item">11</div>
+        <div class="grid-item">12</div>
+    </div>
 
 
 

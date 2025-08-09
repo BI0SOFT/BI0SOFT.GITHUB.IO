@@ -171,7 +171,7 @@ html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Arial;background:trans
 .header-controls{display:flex;gap:8px;align-items:center}
 
 /* Tabs container */
-.tabs-container{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:12px;gap:12px}
+.tabs-container{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:12px;gap:12px;align-items: center;}
 
 /* The tabs itself and panels. Each panel fullfills space */
 .tabs{display:flex;gap:8px;margin-bottom:8px}
@@ -196,6 +196,7 @@ canvas{width:100%;height:100%;display:block}
   .sidebar{display:none}
   .sidebar.hidden{display:none}
 }
+
 
 
 

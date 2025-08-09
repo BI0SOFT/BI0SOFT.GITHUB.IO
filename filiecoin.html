@@ -5,11 +5,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Filecoin Metrics — Single Page (Chart.js)</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>html,body,#root{height:100%} body{background:linear-gradient(180deg,#f8fafc,#eef2ff);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial} .error-banner{background:#fff7ed;border:1px solid #fcd34d;padding:10px;border-radius:8px;color:#92400e}</style>
+  <style>
+    html,body,#root{height:100%}
+    body{background:linear-gradient(180deg,#f8fafc,#eef2ff);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial}
+    .error-banner{background:#fff7ed;border:1px solid #fcd34d;padding:10px;border-radius:8px;color:#92400e;margin-bottom:12px}
+  </style>
 </head>
 <body>
   <div id="root" class="p-6 max-w-6xl mx-auto">
     <div id="banner"></div>
+
     <div class="bg-white rounded-xl shadow p-4 mb-4">
       <div class="flex items-center justify-between">
         <div>
@@ -51,7 +56,13 @@
       <div class="md:col-span-2 bg-white rounded-xl shadow p-4">
         <div class="flex items-center justify-between mb-2"><div class="font-medium">Данные пользователя</div><div id="rangeLabel" class="text-xs text-slate-500">48h</div></div>
         <canvas id="userChart" style="width:100%;height:180px"></canvas>
-        <div class="flex gap-2 mt-3"><button data-range="24h" class="rangeBtn px-2 py-1 border rounded">24h</button><button data-range="48h" class="rangeBtn px-2 py-1 border rounded bg-slate-800 text-white">48h</button><button data-range="7d" class="rangeBtn px-2 py-1 border rounded">7d</button><button data-range="30d" class="rangeBtn px-2 py-1 border rounded">30d</button><div class="ml-auto"><button id="snapshotBtn" class="px-3 py-1 border rounded">Snapshot</button></div></div>
+        <div class="flex gap-2 mt-3">
+          <button data-range="24h" class="rangeBtn px-2 py-1 border rounded">24h</button>
+          <button data-range="48h" class="rangeBtn px-2 py-1 border rounded bg-slate-800 text-white">48h</button>
+          <button data-range="7d" class="rangeBtn px-2 py-1 border rounded">7d</button>
+          <button data-range="30d" class="rangeBtn px-2 py-1 border rounded">30d</button>
+          <div class="ml-auto"><button id="snapshotBtn" class="px-3 py-1 border rounded">Snapshot</button></div>
+        </div>
       </div>
 
       <div class="bg-white rounded-xl shadow p-4">
@@ -73,80 +84,83 @@
 
   <!-- Chart.js UMD -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script>
-  (function(){
-    // defensive helpers
-    function showBanner(html){
-      try{ document.getElementById('banner').innerHTML = html; }catch(e){ console.warn('showBanner failed', e); }
-    }
-    function setStatus(msg){ try{ document.getElementById('status').textContent = msg; }catch(e){} }
 
-    // patch ethereum if injected in odd ways
+  <script>
+  //
+  // GLOBAL HELPERS: expose showBanner and setStatus so any function can use them
+  //
+  (function globalHelpers(){
+    window.showBanner = function(html){
+      try { document.getElementById('banner').innerHTML = html; } catch (e) { console.warn('showBanner failed', e); }
+    };
+    window.setStatus = function(msg){
+      try { document.getElementById('status').textContent = msg; } catch (e) { /* noop */ }
+    };
+
+    // safe ethereum wrapper to prevent wallet injection errors from breaking script
     function safeWrapEthereum(){
-      try{
-        if(window.ethereum && !window.ethereum.__patched){
+      try {
+        if (window.ethereum && !window.ethereum.__patched) {
           const eth = window.ethereum;
-          ['request','send','sendAsync','enable'].forEach(fn=>{
-            if(typeof eth[fn] === 'function'){
+          ['request','send','sendAsync','enable'].forEach(fn => {
+            if (typeof eth[fn] === 'function') {
               const orig = eth[fn].bind(eth);
-              eth[fn] = function(...args){
-                try{ const r = orig(...args); return (r && typeof r.then==='function') ? r : Promise.resolve(r); }catch(e){ console.warn('ethereum.'+fn+' threw', e); return Promise.reject(e); }
+              eth[fn] = function(...args) {
+                try { const r = orig(...args); return (r && typeof r.then === 'function') ? r : Promise.resolve(r); }
+                catch(err) { console.warn('ethereum.'+fn+' threw', err); return Promise.reject(err); }
               };
             }
           });
-          Object.defineProperty(eth,'__patched',{value:true,configurable:false});
+          try { Object.defineProperty(eth, '__patched', { value: true, configurable: false }); } catch(e){ eth.__patched = true; }
           console.debug('Patched ethereum');
         }
-      }catch(e){ console.warn('safeWrapEthereum failed', e); }
+      } catch (e) { console.warn('safeWrapEthereum failed', e); }
     }
     safeWrapEthereum();
     const patchIv = setInterval(safeWrapEthereum, 250);
     setTimeout(()=>clearInterval(patchIv), 15000);
 
     window.addEventListener('error', function(ev){
-      const message = ev && ev.message ? ev.message : '';
-      if(/MetaMask|Failed to connect/i.test(message)){
-        showBanner('<div class="error-banner"><strong>MetaMask connection failed</strong><br/>Попытка подключения кошелька завершилась неудачей — приложение продолжит работу в режиме симуляции.</div>');
-        ev.preventDefault && ev.preventDefault();
-      } else {
-        console.error('Unhandled error', ev);
-      }
+      try {
+        const message = ev && ev.message ? ev.message : '';
+        if (/MetaMask|Failed to connect/i.test(message)) {
+          window.showBanner('<div class="error-banner"><strong>MetaMask connection failed</strong><br/>Попытка подключения кошелька завершилась неудачей — приложение продолжит работу в режиме симуляции.</div>');
+          ev.preventDefault && ev.preventDefault();
+        } else {
+          console.error('Unhandled error', ev);
+        }
+      } catch(e) { console.error('error handler failed', e); }
     });
+
     window.addEventListener('unhandledrejection', function(ev){
-      const reason = ev && ev.reason ? ev.reason : ev;
-      const msg = reason && reason.message ? reason.message : String(reason);
-      if(/MetaMask|Failed to connect/i.test(msg)){
-        showBanner('<div class="error-banner"><strong>MetaMask connection failed</strong><br/>Попытка подключения кошелька завершилась неудачей — приложение продолжит работу в режиме симуляции.</div>');
-        ev.preventDefault && ev.preventDefault();
-      } else {
-        console.error('Unhandled rejection', ev);
-      }
+      try {
+        const reason = ev && ev.reason ? ev.reason : ev;
+        const msg = reason && reason.message ? reason.message : String(reason);
+        if (/MetaMask|Failed to connect/i.test(msg)) {
+          window.showBanner('<div class="error-banner"><strong>MetaMask connection failed</strong><br/>Попытка подключения кошелька завершилась неудачей — приложение продолжит работу в режиме симуляции.</div>');
+          ev.preventDefault && ev.preventDefault();
+        } else {
+          console.error('Unhandled rejection', ev);
+        }
+      } catch(e) { console.error('unhandledrejection handler failed', e); }
     });
   })();
 
-  // RNG / data generators
+  //
+  // DATA + CHARTS
+  //
   function seededRandom(seed){ let t = seed % 2147483647; if (t <= 0) t += 2147483646; return function(){ t = (t * 16807) % 2147483647; return (t - 1) / 2147483646; }; }
   function generateTimeSeries(seedBase = 42, points = 48, startValue = 100, volatility = 0.03, multiplier = 1){
     const rand = seededRandom(seedBase + Math.floor(Date.now()/1000));
-    let v = startValue;
-    const arr = [];
-    for(let i=0;i<points;i++){
-      const change = (rand()-0.5)*2*volatility;
-      v = Math.max(0, v*(1+change)) + (rand()-0.5)*multiplier;
-      arr.push({t:i, value: Number(v.toFixed(4))});
-    }
+    let v = startValue; const arr = [];
+    for (let i=0;i<points;i++){ const change = (rand()-0.5)*2*volatility; v = Math.max(0, v*(1+change)) + (rand()-0.5)*multiplier; arr.push({t:i, value:Number(v.toFixed(4))}); }
     return arr;
   }
   function generateTopMiners(seed=7,count=8){
-    const rand=seededRandom(seed+Math.floor(Date.now()/3600));
-    const miners=[];
-    for(let i=0;i<count;i++){
-      miners.push({ id:'t0'+Math.floor(rand()*1e7).toString(16), powerPiB: +(Math.max(0.1, rand()*50)).toFixed(2), activeDeals: Math.floor(rand()*1200) });
-    }
-    miners.sort((a,b)=>b.powerPiB-a.powerPiB);
-    return miners;
+    const rand = seededRandom(seed + Math.floor(Date.now()/3600)); const miners = [];
+    for (let i=0;i<count;i++){ miners.push({ id:'t0'+Math.floor(rand()*1e7).toString(16), powerPiB: +(Math.max(0.1, rand()*50)).toFixed(2), activeDeals: Math.floor(rand()*1200) }); }
+    miners.sort((a,b)=>b.powerPiB-a.powerPiB); return miners;
   }
-
   function buildFakeSnapshot(){
     const net = generateTimeSeries(1234,48,15000,0.02,50).map(x=>({t:x.t, value:+x.value.toFixed(4)}));
     const deals = generateTimeSeries(5,48,240000,0.01,10);
@@ -155,47 +169,32 @@
     const user = generateTimeSeries(202,48,12,0.03,0.5);
     return { epoch: Math.floor(220000 + Math.random()*12000), blockHeight: Math.floor(15e6 + Math.random()*20000), networkPower: net, dealCount: deals, filPrice: fil, retrievalSuccessRate: retrieval, userData: user };
   }
-
   function prettyNum(x){ if (x>=1e12) return (x/1e12).toFixed(2)+'T'; if (x>=1e9) return (x/1e9).toFixed(2)+'B'; if (x>=1e6) return (x/1e6).toFixed(2)+'M'; if (x>=1e3) return (x/1e3).toFixed(2)+'K'; return Number(x).toFixed(2); }
 
-  // state
   let state = { data: buildFakeSnapshot(), miners: generateTopMiners(), mode: 'simulate', range: '48h' };
-  let netChart=null, userChart=null, pieChart=null;
-  let tickIntervalId = null;
+  let netChart=null, userChart=null, pieChart=null, tickIntervalId=null;
 
-  // Chart creation
   function createCharts(){
-    if(typeof Chart === 'undefined'){ document.getElementById('status').textContent = 'Chart.js not loaded'; return; }
+    if(typeof Chart === 'undefined'){ window.setStatus && window.setStatus('Chart.js not loaded'); return; }
     const netCtx = document.getElementById('networkChart').getContext('2d');
-    netChart = new Chart(netCtx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          { label: 'Network PiB', data: [], borderColor: '#0ea5a4', backgroundColor: 'rgba(14,165,164,0.08)', fill: true, tension:0.3 },
-          { label: 'Deals', data: [], borderColor: '#60a5fa', tension:0.3 },
-          { label: 'FIL', data: [], borderColor: '#f97316', tension:0.3 }
-        ]
-      },
-      options: { animation:false, plugins:{ legend:{display:true}}, scales:{ x:{display:false}, y:{beginAtZero:false} } }
-    });
+    netChart = new Chart(netCtx, { type:'line', data:{ labels:[], datasets:[
+      { label: 'Network PiB', data:[], borderColor:'#0ea5a4', backgroundColor:'rgba(14,165,164,0.08)', fill:true, tension:0.3 },
+      { label: 'Deals', data:[], borderColor:'#60a5fa', tension:0.3 },
+      { label: 'FIL', data:[], borderColor:'#f97316', tension:0.3 }
+    ] }, options:{ animation:false, plugins:{ legend:{display:true}}, scales:{ x:{display:false}, y:{beginAtZero:false} } } });
 
     const userCtx = document.getElementById('userChart').getContext('2d');
-    userChart = new Chart(userCtx, {
-      type:'line',
-      data:{ labels:[], datasets:[
-        {label:'User GB', data:[], borderColor:'#84cc16', tension:0.2, fill:false},
-        {label:'Retrieval %', data:[], borderColor:'#06b6d4', tension:0.2, yAxisID:'p', fill:false}
-      ]},
-      options:{ animation:false, plugins:{ legend:{display:true} }, scales:{ p:{ position:'right', min:0, max:100 } } }
-    });
+    userChart = new Chart(userCtx, { type:'line', data:{ labels:[], datasets:[
+      { label:'User GB', data:[], borderColor:'#84cc16', tension:0.2, fill:false },
+      { label:'Retrieval %', data:[], borderColor:'#06b6d4', tension:0.2, yAxisID:'p', fill:false }
+    ] }, options:{ animation:false, plugins:{ legend:{display:true} }, scales:{ p:{ position:'right', min:0, max:100 } } } });
 
     const pieCtx = document.getElementById('pieChart').getContext('2d');
     pieChart = new Chart(pieCtx, { type:'pie', data:{ labels:[], datasets:[{ data:[], backgroundColor:[ '#60a5fa','#0ea5a4','#f97316','#84cc16','#a78bfa','#fb7185','#f59e0b','#34d399' ] }] }, options:{ animation:false, plugins:{ legend:{display:false} } } });
   }
 
   function updateFromState(){
-    try{
+    try {
       const d = state.data;
       if(!netChart || !userChart || !pieChart) return;
       const labels = d.networkPower.map(p=>p.t);
@@ -221,10 +220,7 @@
       document.getElementById('statDeals').textContent = Math.round(d.dealCount[d.dealCount.length-1].value || 0);
       document.getElementById('statFil').textContent = '$' + (d.filPrice[d.filPrice.length-1].value || 0).toFixed(2);
 
-      // build miners list safely (no raw newline in code)
-      const minersHtml = state.miners.map(m => {
-        return `<div class="flex justify-between py-1"><div class="truncate mr-2">${m.id}</div><div class="text-right">${m.powerPiB} PiB<br/><span class="text-slate-400 text-xs">${m.activeDeals} deals</span></div></div>`;
-      }).join('');
+      const minersHtml = state.miners.map(m => `<div class="flex justify-between py-1"><div class="truncate mr-2">${m.id}</div><div class="text-right">${m.powerPiB} PiB<br/><span class="text-slate-400 text-xs">${m.activeDeals} deals</span></div></div>`).join('');
       document.getElementById('minersList').innerHTML = minersHtml;
 
       const lastPoint = d.userData.length ? d.userData[d.userData.length-1].value : 0;
@@ -232,14 +228,14 @@
       document.getElementById('qRetrieval').textContent = (d.retrievalSuccessRate[d.retrievalSuccessRate.length-1].value || 0).toFixed(2) + '%';
       document.getElementById('qUser').textContent = lastPoint.toFixed(2) + ' GB';
       document.getElementById('qDeals').textContent = Math.round(d.dealCount[d.dealCount.length-1].value || 0);
-    }catch(e){
+    } catch(e) {
       console.error('updateFromState failed', e);
-      document.getElementById('status').textContent = 'update failed: '+String(e.message || e);
+      window.setStatus && window.setStatus('update failed: '+String(e.message || e));
     }
   }
 
   function tickSimulate(){
-    try{
+    try {
       const next = state.data;
       next.epoch++;
       next.blockHeight += Math.floor(0.9 + Math.random()*2.1);
@@ -247,8 +243,8 @@
         const last = series.length ? series[series.length-1].value : 1;
         const noise = (Math.random()-0.5)*2*0.02*mult*last;
         const val = Math.max(lb, Number((last + noise).toFixed(6)));
-        series.push({t: series.length ? series[series.length-1].t+1 : 0, value: val});
-        if(series.length>96) series.shift();
+        series.push({ t: series.length ? series[series.length-1].t+1 : 0, value: val });
+        if(series.length > 96) series.shift();
       }
       step(next.networkPower, 1, 0);
       step(next.dealCount, 1.02, 0);
@@ -257,18 +253,17 @@
       step(next.userData, 0.5, 0);
       state.data = next;
       updateFromState();
-    }catch(e){
+    } catch(e) {
       console.warn('tickSimulate error', e);
     }
   }
 
-  // CSV export (fixed: use '\n' and safe JSON quoting)
   function exportCSV(){
-    try{
+    try {
       const d = state.data;
-      const rows=[];
+      const rows = [];
       const len = Math.max(d.networkPower.length, d.dealCount.length, d.filPrice.length);
-      for(let i=0;i<len;i++){
+      for (let i=0;i<len;i++){
         rows.push({
           t:i,
           networkPower_PiB: d.networkPower[i]?.value ?? '',
@@ -280,22 +275,19 @@
       }
       const keys = Object.keys(rows[0] || {});
       const csv = [keys.join(',')].concat(rows.map(r=> keys.map(k=>JSON.stringify(r[k]??'')).join(','))).join('\n');
-      const blob = new Blob([csv], {type:'text/csv'});
+      const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href=url; a.download='filecoin_metrics.csv'; a.click();
-      URL.revokeObjectURL(url);
-    }catch(e){
+      const a = document.createElement('a'); a.href = url; a.download = 'filecoin_metrics.csv'; a.click(); URL.revokeObjectURL(url);
+    } catch(e) {
       console.error('exportCSV failed', e);
-      showBanner && showBanner('<div class="error-banner">Export failed: '+String(e.message || e)+'</div>');
+      window.showBanner && window.showBanner('<div class="error-banner">Export failed: '+String(e.message || e)+'</div>');
     }
   }
 
-  // snapshot
   function snapshot(){
-    try{
+    try {
       const net = document.getElementById('networkChart');
-      if(!net) return;
+      if (!net) return;
       const canvas = document.createElement('canvas');
       canvas.width = net.width; canvas.height = net.height;
       const ctx = canvas.getContext('2d');
@@ -303,14 +295,13 @@
       ctx.drawImage(net,0,0);
       const png = canvas.toDataURL('image/png');
       const a = document.createElement('a'); a.href = png; a.download = 'filecoin_metrics_snapshot.png'; a.click();
-    }catch(e){
+    } catch(e) {
       console.error('snapshot failed', e);
     }
   }
 
-  // UI wiring - wait for DOM
   (function wiring(){
-    try{
+    try {
       const refreshBtn = document.getElementById('refreshBtn');
       const toggleMode = document.getElementById('toggleMode');
       const exportCsvBtn = document.getElementById('exportCsv');
@@ -326,30 +317,25 @@
       reshuffle && reshuffle.addEventListener('click', ()=>{ state.miners = generateTopMiners(); updateFromState(); });
       reset && reset.addEventListener('click', ()=>{ state.data = buildFakeSnapshot(); updateFromState(); });
       rangeBtns && rangeBtns.forEach(b=> b.addEventListener('click',(e)=>{ document.querySelectorAll('.rangeBtn').forEach(x=>x.classList.remove('bg-slate-800','text-white')); e.target.classList.add('bg-slate-800','text-white'); state.range = e.target.dataset.range; document.getElementById('rangeLabel').textContent = state.range; }));
-    }catch(e){
-      console.error('wiring failed', e);
-    }
+    } catch(e) { console.error('wiring failed', e); }
   })();
 
-  // init flow
   (function init(){
-    try{
-      setStatus('initializing');
+    try {
+      window.setStatus && window.setStatus('initializing');
       createCharts();
       updateFromState();
-      // initial tick to show change
-      try{ tickSimulate(); }catch(e){ console.warn('initial tickSimulate failed', e); }
-      // single interval for simulation ticks
-      if(tickIntervalId) clearInterval(tickIntervalId);
-      tickIntervalId = setInterval(()=>{ if(state.mode==='simulate') tickSimulate(); }, 2000);
-      setStatus('running');
+      // kick an initial tick so the charts show motion quickly
+      try { tickSimulate(); } catch(e) { console.warn('initial tickSimulate failed', e); }
+      if (tickIntervalId) clearInterval(tickIntervalId);
+      tickIntervalId = setInterval(()=>{ if (state.mode === 'simulate') tickSimulate(); }, 2000);
+      window.setStatus && window.setStatus('running');
       console.info('Filecoin metrics demo started');
-    }catch(e){
+    } catch(e) {
       console.error('init failed', e);
-      document.getElementById('status').textContent = 'init error: '+String(e.message || e);
+      window.setStatus && window.setStatus('init error: '+String(e.message || e));
     }
   })();
-
   </script>
 </body>
 </html>

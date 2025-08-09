@@ -1,215 +1,355 @@
-<!--
-Single-file SPA: Filecoin Metrics (robust UMD build)
-This version includes runtime checks, clearer errors rendered on-page, and compatibility fixes.
-
-Why update:
-- If scripts fail to load (CDN blocked / CSP / network), the page now shows a visible error and logs details to console.
-- Fixed previously broken CSV newline escape.
-- Avoids using Array.at for compatibility.
-- Provides fallback rendering if ReactDOM.createRoot is unavailable.
-
-Deploy: drop this file into GitHub Pages or open locally in a browser.
--->
 <!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Filecoin Metrics — Single Page (robust)</title>
+  <title>Filecoin Metrics — Single Page (Chart.js)</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>html,body,#root{height:100%} body{background:linear-gradient(180deg,#f8fafc,#eef2ff);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial}</style>
+  <style>html,body,#root{height:100%} body{background:linear-gradient(180deg,#f8fafc,#eef2ff);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial} .error-banner{background:#fff7ed;border:1px solid #fcd34d;padding:10px;border-radius:8px;color:#92400e}</style>
 </head>
 <body>
-  <div id="root" class="p-6"></div>
+  <div id="root" class="p-6 max-w-6xl mx-auto">
+    <div id="banner"></div>
+    <div class="bg-white rounded-xl shadow p-4 mb-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-lg font-semibold">Filecoin Metrics</h1>
+          <p class="text-xs text-slate-500">Сеть • Экономика • Состояние данных</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input id="addr" class="border rounded px-2 py-1 text-sm" placeholder="Wallet / Deal ID (optional)" />
+          <button id="toggleMode" class="px-3 py-1 border rounded">simulate</button>
+          <button id="refreshBtn" class="px-3 py-1 border rounded">Refresh</button>
+          <button id="exportCsv" class="px-3 py-1 border rounded">Export CSV</button>
+        </div>
+      </div>
+    </div>
 
-  <!-- UMD builds -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="md:col-span-2 bg-white rounded-xl shadow p-4">
+        <div class="flex items-center justify-between mb-2">
+          <div class="font-medium">Сетевые метрики</div>
+          <div id="lastUpdated" class="text-xs text-slate-500">—</div>
+        </div>
+        <canvas id="networkChart" style="width:100%;height:320px"></canvas>
+        <div class="grid grid-cols-3 gap-3 mt-3 text-sm">
+          <div class="p-2 border rounded"><div class="text-xs text-slate-500">Network Power</div><div id="statPower" class="font-semibold">—</div></div>
+          <div class="p-2 border rounded"><div class="text-xs text-slate-500">Active Deals</div><div id="statDeals" class="font-semibold">—</div></div>
+          <div class="p-2 border rounded"><div class="text-xs text-slate-500">FIL Price</div><div id="statFil" class="font-semibold">—</div></div>
+        </div>
+      </div>
 
+      <div class="bg-white rounded-xl shadow p-4">
+        <div class="flex items-center justify-between mb-2"><div class="font-medium">Экономика</div><div id="epoch" class="text-xs text-slate-500">#—</div></div>
+        <canvas id="pieChart" style="width:100%;height:180px"></canvas>
+        <div class="mt-3 text-xs text-slate-500">Top miners by power (simulated)</div>
+        <div id="minersList" class="mt-2 text-xs max-h-40 overflow-auto"></div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+      <div class="md:col-span-2 bg-white rounded-xl shadow p-4">
+        <div class="flex items-center justify-between mb-2"><div class="font-medium">Данные пользователя</div><div id="rangeLabel" class="text-xs text-slate-500">48h</div></div>
+        <canvas id="userChart" style="width:100%;height:180px"></canvas>
+        <div class="flex gap-2 mt-3"><button data-range="24h" class="rangeBtn px-2 py-1 border rounded">24h</button><button data-range="48h" class="rangeBtn px-2 py-1 border rounded bg-slate-800 text-white">48h</button><button data-range="7d" class="rangeBtn px-2 py-1 border rounded">7d</button><button data-range="30d" class="rangeBtn px-2 py-1 border rounded">30d</button><div class="ml-auto"><button id="snapshotBtn" class="px-3 py-1 border rounded">Snapshot</button></div></div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow p-4">
+        <div class="font-medium mb-2">Quick metrics</div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="p-2 border rounded"><div class="text-slate-500">Block height</div><div id="qBlock">—</div></div>
+          <div class="p-2 border rounded"><div class="text-slate-500">Retrieval %</div><div id="qRetrieval">—</div></div>
+          <div class="p-2 border rounded"><div class="text-slate-500">User stored (GB)</div><div id="qUser">—</div></div>
+          <div class="p-2 border rounded"><div class="text-slate-500">Deal count</div><div id="qDeals">—</div></div>
+        </div>
+        <div class="mt-3 text-xs text-slate-500">Settings</div>
+        <div class="mt-2 flex gap-2"><button id="reshuffle" class="px-2 py-1 border rounded">Reshuffle miners</button><button id="reset" class="px-2 py-1 border rounded">Reset snapshot</button></div>
+      </div>
+    </div>
+
+    <div class="mt-4 text-xs text-slate-400">Примечание: данные по умолчанию симулируются. Подключите реальный API для живых метрик.</div>
+    <div id="status" class="mt-3 text-xs text-slate-500"></div>
+  </div>
+
+  <!-- Chart.js UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script>
-    (function(){
-      const rootEl = document.getElementById('root');
+  (function(){
+    // defensive helpers
+    function showBanner(html){
+      try{ document.getElementById('banner').innerHTML = html; }catch(e){ console.warn('showBanner failed', e); }
+    }
+    function setStatus(msg){ try{ document.getElementById('status').textContent = msg; }catch(e){} }
 
-      function renderError(message, details) {
-        console.error(message, details);
-        rootEl.innerHTML = '';
-        const card = document.createElement('div');
-        card.className = 'max-w-3xl mx-auto bg-white rounded-xl shadow p-6 text-sm text-red-700';
-        card.innerHTML = '<strong>Ошибка загрузки модуля:</strong> ' + (message || 'Unknown') + '<br/><br/>' +
-          '<div class="text-xs text-slate-500">Откройте консоль разработчика (F12) для деталей.</div>';
-        rootEl.appendChild(card);
-        if (details) console.debug(details);
-      }
-
-      // Basic runtime checks
-      if (!window.React || !window.ReactDOM || !window.Recharts) {
-        renderError('Не удалось загрузить зависимости. Проверьте доступ к CDN (unpkg) или CSP-политику.', {
-          hasReact: !!window.React,
-          hasReactDOM: !!window.ReactDOM,
-          hasRecharts: !!window.Recharts
-        });
-        return;
-      }
-
-      try {
-        const React = window.React;
-        const ReactDOM = window.ReactDOM;
-        const Recharts = window.Recharts;
-        const { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } = Recharts;
-        const { useState, useEffect, useRef, useMemo } = React;
-
-        // --- Helpers ---
-        function seededRandom(seed) {
-          let t = seed % 2147483647;
-          if (t <= 0) t += 2147483646;
-          return function() { t = (t * 16807) % 2147483647; return (t - 1) / 2147483646; };
-        }
-        function generateTimeSeries(seedBase = 42, points = 48, startValue = 100, volatility = 0.03, multiplier = 1) {
-          const rand = seededRandom(seedBase + Math.floor(Date.now() / 1000));
-          let v = startValue; const arr = [];
-          for (let i = 0; i < points; i++) {
-            const change = (rand() - 0.5) * 2 * volatility;
-            v = Math.max(0, v * (1 + change)) + (rand() - 0.5) * multiplier;
-            arr.push({ t: i, value: Number(v.toFixed(4)) });
-          }
-          return arr;
-        }
-        function prettyNum(x) {
-          if (x >= 1e12) return (x / 1e12).toFixed(2) + 'T';
-          if (x >= 1e9) return (x / 1e9).toFixed(2) + 'B';
-          if (x >= 1e6) return (x / 1e6).toFixed(2) + 'M';
-          if (x >= 1e3) return (x / 1e3).toFixed(2) + 'K';
-          return Number(x).toFixed(2);
-        }
-        function generateTopMiners(seed = 7, count = 8) {
-          const rand = seededRandom(seed + Math.floor(Date.now() / 3600));
-          const miners = [];
-          for (let i = 0; i < count; i++) miners.push({
-            id: 't0' + Math.floor(rand() * 1e7).toString(16),
-            powerPiB: +(Math.max(0.1, rand() * 50)).toFixed(2),
-            activeDeals: Math.floor(rand() * 1200),
+    // patch ethereum if injected in odd ways
+    function safeWrapEthereum(){
+      try{
+        if(window.ethereum && !window.ethereum.__patched){
+          const eth = window.ethereum;
+          ['request','send','sendAsync','enable'].forEach(fn=>{
+            if(typeof eth[fn] === 'function'){
+              const orig = eth[fn].bind(eth);
+              eth[fn] = function(...args){
+                try{ const r = orig(...args); return (r && typeof r.then==='function') ? r : Promise.resolve(r); }catch(e){ console.warn('ethereum.'+fn+' threw', e); return Promise.reject(e); }
+              };
+            }
           });
-          miners.sort((a,b)=>b.powerPiB-a.powerPiB); return miners;
+          Object.defineProperty(eth,'__patched',{value:true,configurable:false});
+          console.debug('Patched ethereum');
         }
-        function exportCSV(filename, rows) {
-          if (!rows || !rows.length) return alert('Нет данных для экспорта');
-          const keys = Object.keys(rows[0] || {});
-          const csv = [keys.join(',')].concat(rows.map(r => keys.map(k => JSON.stringify(r[k] ?? '')).join(','))).join('
-');
-          const blob = new Blob([csv], { type: 'text/csv' });
-          const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
-        }
+      }catch(e){ console.warn('safeWrapEthereum failed', e); }
+    }
+    safeWrapEthereum();
+    const patchIv = setInterval(safeWrapEthereum, 250);
+    setTimeout(()=>clearInterval(patchIv), 15000);
 
-        // --- Component ---
-        function FilecoinMetrics(){
-          const [mode, setMode] = useState('simulate');
-          const [range, setRange] = useState('48h');
-          const [address, setAddress] = useState('');
-          const [lastUpdated, setLastUpdated] = useState(Date.now());
-          const [data, setData] = useState(buildFakeSnapshot());
-          const [miners, setMiners] = useState(generateTopMiners());
-          const [refreshing, setRefreshing] = useState(false);
-          const chartRef = useRef(null);
-
-          useEffect(()=>{
-            const iv = setInterval(()=>{ if (mode==='simulate') tick(); }, 4200);
-            return ()=>clearInterval(iv);
-          }, [mode]);
-
-          function tick(){
-            setData(prev=>{
-              const next = {...prev}; next.epoch++; next.blockHeight += Math.floor(0.9 + Math.random()*2.1);
-              next.networkPower = shiftAndAppend(next.networkPower, simulatedStep(next.networkPower));
-              next.dealCount = shiftAndAppend(next.dealCount, simulatedStep(next.dealCount,1.02));
-              next.filPrice = shiftAndAppend(next.filPrice, simulatedStep(next.filPrice,1.05));
-              next.retrievalSuccessRate = shiftAndAppend(next.retrievalSuccessRate, simulatedStep(next.retrievalSuccessRate,0.005,95));
-              next.userData = shiftAndAppend(next.userData, simulatedStep(next.userData,0.5));
-              setLastUpdated(Date.now()); return next;
-            });
-          }
-          function simulatedStep(series, multiplier=1, lowerBound=0){ const last = (series && series.length)? series[series.length-1].value : 1; const noise=(Math.random()-0.5)*2*0.02*multiplier*last; return Math.max(lowerBound, Number((last+noise).toFixed(6))); }
-          function shiftAndAppend(series,newVal){ const arr = (Array.isArray(series) ? series.slice() : []); arr.push({ t: arr.length>0 ? arr[arr.length-1].t+1 : 0, value: newVal }); if (arr.length>96) arr.shift(); return arr; }
-
-          function buildFakeSnapshot(){ const net = generateTimeSeries(1234,48,15000,0.02,50).map(x=>({t:x.t,value:+x.value.toFixed(4)})); const deals = generateTimeSeries(5,48,240000,0.01,10); const fil = generateTimeSeries(99,48,3.5,0.04,0.4); const retrieval = generateTimeSeries(77,48,98.5,0.002,0.1); const user = generateTimeSeries(202,48,12,0.03,0.5); return { epoch: Math.floor(220000 + Math.random()*12000), blockHeight: Math.floor(15e6 + Math.random()*20000), networkPower: net, dealCount: deals, filPrice: fil, retrievalSuccessRate: retrieval, userData: user } }
-
-          async function refresh(){ setRefreshing(true); try{ if(mode==='live'){ await new Promise(r=>setTimeout(r,700)); tick(); } else { await new Promise(r=>setTimeout(r,300)); setData(buildFakeSnapshot()); setMiners(generateTopMiners()); } } finally { setRefreshing(false); setLastUpdated(Date.now()); } }
-
-          function onExportCSV(){ const rows=[]; const len = Math.max(data.networkPower.length, data.dealCount.length, data.filPrice.length); for(let i=0;i<len;i++){ rows.push({ t:i, networkPower_PiB: data.networkPower[i]?.value ?? '', dealCount: data.dealCount[i]?.value ?? '', fil: data.filPrice[i]?.value ?? '', retrievalRate: data.retrievalSuccessRate[i]?.value ?? '', userData_GB: data.userData[i]?.value ?? '' }); } exportCSV('filecoin_metrics.csv', rows); }
-
-          function snapshotPNG(){ const svg = chartRef.current && chartRef.current.querySelector ? chartRef.current.querySelector('svg') : null; if(!svg) return alert('График не найден'); const serializer = new XMLSerializer(); const svgStr = serializer.serializeToString(svg); const canvas = document.createElement('canvas'); canvas.width = svg.clientWidth*2; canvas.height = svg.clientHeight*2; const ctx = canvas.getContext('2d'); const img = new Image(); const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' }); const url = URL.createObjectURL(svgBlob); img.onload = ()=>{ ctx.drawImage(img,0,0,canvas.width,canvas.height); const pngUrl = canvas.toDataURL('image/png'); const a = document.createElement('a'); a.href = pngUrl; a.download = 'filecoin_metrics_snapshot.png'; a.click(); URL.revokeObjectURL(url); }; img.src = url; }
-
-          const seriesForChart = useMemo(()=>{ const len = Math.max(data.networkPower.length, data.dealCount.length, data.filPrice.length); const arr = []; for (let i=0;i<len;i++){ arr.push({ t:`#${i}`, power: Number((data.networkPower[i]?.value ?? 0).toFixed(4)), deals: Number((data.dealCount[i]?.value ?? 0).toFixed(4)), fil: Number((data.filPrice[i]?.value ?? 0).toFixed(4)), retrieval: Number((data.retrievalSuccessRate[i]?.value ?? 0).toFixed(4)), userData: Number((data.userData[i]?.value ?? 0).toFixed(4)), }); } return arr; }, [data]);
-
-          const lastPoint = seriesForChart.length ? seriesForChart[seriesForChart.length-1] : null;
-          const topPie = useMemo(()=>{ const total = miners.reduce((s,m)=>s+m.powerPiB,0)||1; return miners.map(m=>({ name:m.id, value: +(m.powerPiB/total*100).toFixed(2) })); }, [miners]);
-
-          // Render
-          return React.createElement('div', { className: 'p-4 bg-white rounded-2xl shadow' },
-            React.createElement('div', { className: 'flex items-center justify-between mb-4' },
-              React.createElement('div', { className: 'flex items-center gap-3' }, folderIcon(), React.createElement('div', null, React.createElement('div', { className: 'font-semibold' }, 'Filecoin Metrics'), React.createElement('div', { className: 'text-xs text-slate-500' }, 'Сеть • Экономика • Состояние данных'))),
-              React.createElement('div', { className: 'flex items-center gap-2' },
-                React.createElement('div', { className: 'flex items-center border rounded-lg px-2 py-1 gap-2' }, searchIcon(), React.createElement('input', { value: address, onChange: e=>setAddress(e.target.value), placeholder: 'Wallet / Deal ID (optional)', className: 'outline-none text-xs bg-transparent' })),
-                React.createElement('button', { onClick: ()=>setMode(prev=> prev==='simulate' ? 'live' : 'simulate'), className: 'flex items-center gap-2 px-3 py-1 rounded-lg border' }, toggleIcon(mode), React.createElement('span', null, mode)),
-                React.createElement('button', { onClick: refresh, className: 'flex items-center gap-2 px-3 py-1 rounded-lg border' }, refreshIcon(), React.createElement('span', null, refreshing ? '...' : 'Refresh')),
-                React.createElement('button', { onClick: onExportCSV, title: 'Export CSV', className: 'px-2 py-1 border rounded-lg' }, downloadIcon())
-              )
-            ),
-
-            React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
-              React.createElement('div', { className: 'col-span-2 bg-slate-50 rounded-xl p-3', ref: chartRef },
-                React.createElement('div', { className: 'flex items-center justify-between mb-2' }, React.createElement('div', { className: 'text-sm font-medium' }, 'Сетевые метрики'), React.createElement('div', { className: 'text-xs text-slate-500' }, 'Обновлено: ' + new Date(lastUpdated).toLocaleTimeString())),
-                React.createElement('div', { style: { height: 300 } }, React.createElement(ResponsiveContainer, { width: '100%', height: '100%' }, React.createElement(AreaChart, { data: seriesForChart, margin: { top: 8, right: 24, left: 0, bottom: 8 } }, React.createElement('defs', null, React.createElement('linearGradient', { id: 'g1', x1: '0', y1: '0', x2: '0', y2: '1' }, React.createElement('stop', { offset: '5%', stopOpacity: 0.6 }), React.createElement('stop', { offset: '95%', stopOpacity: 0.05 }))), React.createElement(XAxis, { dataKey: 't', hide: true }), React.createElement(YAxis, { yAxisId: 'left', orientation: 'left', tickFormatter: v => prettyNum(v) }), React.createElement(Tooltip, null), React.createElement(Area, { yAxisId: 'left', type: 'monotone', dataKey: 'power', stroke: '#0ea5a4', fillOpacity: 1, fill: 'url(#g1)' }), React.createElement(Line, { yAxisId: 'left', type: 'monotone', dataKey: 'deals', stroke: '#60a5fa', dot: false, strokeWidth: 1.5 }), React.createElement(Line, { yAxisId: 'left', type: 'monotone', dataKey: 'fil', stroke: '#f97316', dot: false, strokeWidth: 1.5 })))),
-                React.createElement('div', { className: 'grid grid-cols-3 gap-3 mt-3' }, statCard('Network Power', `${prettyNum(lastPoint ? lastPoint.power : 0)} PiB`, 'Total raw power'), statCard('Active Deals', `${Math.round(lastPoint ? lastPoint.deals : 0)}`, 'Deals in last period'), statCard('FIL Price', `$${(lastPoint ? lastPoint.fil : 0).toFixed(2)}`, 'Market price (sim)'))
-              ),
-
-              React.createElement('div', { className: 'bg-slate-50 rounded-xl p-3' },
-                React.createElement('div', { className: 'flex items-center justify-between mb-2' }, React.createElement('div', { className: 'text-sm font-medium' }, 'Экономика'), React.createElement('div', { className: 'text-xs text-slate-500' }, 'Epoch #' + data.epoch)),
-                React.createElement('div', { style: { height: 150 } }, React.createElement(ResponsiveContainer, { width: '100%', height: '100%' }, React.createElement(PieChart, null, React.createElement(Pie, { data: topPie, dataKey: 'value', nameKey: 'name', innerRadius: 28, outerRadius: 60, paddingAngle: 3, label: ()=>null }, topPie.map((entry, idx)=> React.createElement(Cell, { key: 'c-'+idx }))), React.createElement(Legend, { verticalAlign: 'bottom', height: 36 })))), React.createElement('div', { className: 'mt-2 text-sm text-slate-500' }, 'Top miners by power (simulated)'), React.createElement('div', { className: 'mt-3 space-y-2 max-h-48 overflow-auto' }, miners.map(m => React.createElement('div', { key: m.id, className: 'flex items-center justify-between text-xs' }, React.createElement('div', { className: 'truncate' }, m.id), React.createElement('div', { className: 'text-right' }, React.createElement('div', null, m.powerPiB + ' PiB'), React.createElement('div', { className: 'text-slate-400' }, m.activeDeals + ' deals'))))))
-            ),
-
-            React.createElement('div', { className: 'mt-4 grid grid-cols-1 md:grid-cols-3 gap-3' },
-              React.createElement('div', { className: 'col-span-2 bg-slate-50 rounded-xl p-3' }, React.createElement('div', { className: 'flex items-center justify-between mb-2' }, React.createElement('div', { className: 'text-sm font-medium' }, 'Данные пользователя'), React.createElement('div', { className: 'text-xs text-slate-500' }, 'Последние ' + range)), React.createElement('div', { style: { height: 160 } }, React.createElement(ResponsiveContainer, { width: '100%', height: '100%' }, React.createElement(LineChart, { data: seriesForChart, margin: { top: 8, right: 12, left: 0, bottom: 8 } }, React.createElement(XAxis, { dataKey: 't', hide: true }), React.createElement(YAxis, { tickFormatter: v => v.toFixed(2) + ' GB' }), React.createElement(Tooltip, null), React.createElement(Line, { dataKey: 'userData', stroke: '#84cc16', dot: false }), React.createElement(Line, { dataKey: 'retrieval', stroke: '#06b6d4', dot: false })))), React.createElement('div', { className: 'flex items-center gap-3 mt-3' }, React.createElement('div', { className: 'text-xs' }, 'Time range:'), React.createElement('div', { className: 'flex gap-2' }, ['24h','48h','7d','30d'].map(r => React.createElement('button', { key: r, onClick: ()=>setRange(r), className: 'px-2 py-1 rounded ' + (range===r ? 'bg-slate-800 text-white' : 'border') }, r))), React.createElement('div', { className: 'ml-auto flex gap-2' }, React.createElement('button', { onClick: snapshotPNG, className: 'px-3 py-1 border rounded' }, 'Snapshot'), React.createElement('button', { onClick: onExportCSV, className: 'px-3 py-1 border rounded' }, 'Export CSV')))),
-
-              React.createElement('div', { className: 'bg-slate-50 rounded-xl p-3' }, React.createElement('div', { className: 'text-sm font-medium mb-2' }, 'Quick metrics'), React.createElement('div', { className: 'grid grid-cols-2 gap-2 text-xs' }, metric('Block height', prettyNum(data.blockHeight)), metric('Retrieval %', (lastPoint ? lastPoint.retrieval : 0).toFixed(2) + '%'), metric('User stored (GB)', (lastPoint ? lastPoint.userData : 0).toFixed(2)), metric('Deal count', Math.round(lastPoint ? lastPoint.deals : 0))), React.createElement('div', { className: 'mt-3 text-xs text-slate-500' }, 'Settings'), React.createElement('div', { className: 'mt-2 flex gap-2' }, React.createElement('button', { onClick: ()=>setMiners(generateTopMiners()), className: 'px-2 py-1 border rounded' }, 'Reshuffle miners'), React.createElement('button', { onClick: ()=>{ setData(buildFakeSnapshot()); setLastUpdated(Date.now()); }, className: 'px-2 py-1 border rounded' }, 'Reset snapshot')))
-            ),
-
-            React.createElement('div', { className: 'mt-3 text-xs text-slate-400' }, 'Примечание: все данные по умолчанию симулируются. Переключитесь в режим "live" и подключите реальный API для получения живых метрик.')
-          );
-
-          // --- inner helper functions used above ---
-          function statCard(title, value, hint){ return React.createElement('div', { className: 'bg-white border p-2 rounded flex flex-col' }, React.createElement('div', { className: 'text-xs text-slate-500' }, title), React.createElement('div', { className: 'font-semibold' }, value), React.createElement('div', { className: 'text-xs text-slate-400' }, hint)); }
-          function metric(label, value){ return React.createElement('div', { className: 'border rounded p-2' }, React.createElement('div', { className: 'text-slate-500 text-[11px]' }, label), React.createElement('div', { className: 'font-medium' }, value)); }
-          function folderIcon(){ return React.createElement('svg', { width:24, height:24, viewBox:'0 0 24 24', fill:'none', xmlns:'http://www.w3.org/2000/svg' }, React.createElement('path', { d:'M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z', stroke:'#0f172a', strokeWidth:1.2, fill:'rgba(15,23,42,0.04)' })); }
-          function searchIcon(){ return React.createElement('svg', { width:14, height:14, viewBox:'0 0 24 24', fill:'none', xmlns:'http://www.w3.org/2000/svg' }, React.createElement('path', { d:'M21 21l-4.35-4.35', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' }), React.createElement('circle', { cx:11, cy:11, r:6, stroke:'#475569', strokeWidth:1.5 })); }
-          function toggleIcon(mode){ return React.createElement('svg', { width:16, height:16, viewBox:'0 0 24 24', fill:'none', xmlns:'http://www.w3.org/2000/svg' }, React.createElement('rect', { x:3, y:7, width:18, height:10, rx:5, stroke:'#475569', strokeWidth:1.2, fill: mode==='simulate' ? 'rgba(15,23,42,0.06)' : 'rgba(96,165,250,0.08)' })); }
-          function refreshIcon(){ return React.createElement('svg', { width:14, height:14, viewBox:'0 0 24 24', fill:'none', xmlns:'http://www.w3.org/2000/svg' }, React.createElement('path', { d:'M21 12a9 9 0 1 0-3.2 6.4L21 21', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' })); }
-          function downloadIcon(){ return React.createElement('svg', { width:14, height:14, viewBox:'0 0 24 24', fill:'none', xmlns:'http://www.w3.org/2000/svg' }, React.createElement('path', { d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' }), React.createElement('path', { d:'M7 10l5 5 5-5', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' }), React.createElement('path', { d:'M12 15V3', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' })); }
-
-        }
-
-        // --- Render to DOM ---
-        try {
-          if (ReactDOM.createRoot) {
-            const root = ReactDOM.createRoot(rootEl);
-            root.render(React.createElement(FilecoinMetrics));
-          } else {
-            ReactDOM.render(React.createElement(FilecoinMetrics), rootEl);
-          }
-        } catch (err) {
-          renderError('Ошибка при рендеринге React-компонента', err && err.stack ? err.stack : err);
-        }
-
-        // small helpers used in component scope but declared here to keep code compact
-        function simulatedStep(series, multiplier=1, lowerBound=0){ const last = (series && series.length) ? series[series.length-1].value : 1; const noise=(Math.random()-0.5)*2*0.02*multiplier*last; return Math.max(lowerBound, Number((last+noise).toFixed(6))); }
-        function shiftAndAppend(series,newVal){ const arr = (Array.isArray(series) ? series.slice() : []); arr.push({t: arr.length>0?arr[arr.length-1].t+1:0, value: newVal}); if(arr.length>96) arr.shift(); return arr; }
-        function buildFakeSnapshot(){ const net = generateTimeSeries(1234,48,15000,0.02,50).map(x=>({t:x.t,value:+x.value.toFixed(4)})); const deals = generateTimeSeries(5,48,240000,0.01,10); const fil = generateTimeSeries(99,48,3.5,0.04,0.4); const retrieval = generateTimeSeries(77,48,98.5,0.002,0.1); const user = generateTimeSeries(202,48,12,0.03,0.5); return { epoch: Math.floor(220000 + Math.random()*12000), blockHeight: Math.floor(15e6 + Math.random()*20000), networkPower: net, dealCount: deals, filPrice: fil, retrievalSuccessRate: retrieval, userData: user } }
-
-      } catch (ex) {
-        renderError('Runtime error', ex && ex.stack ? ex.stack : ex);
+    window.addEventListener('error', function(ev){
+      const message = ev && ev.message ? ev.message : '';
+      if(/MetaMask|Failed to connect/i.test(message)){
+        showBanner('<div class="error-banner"><strong>MetaMask connection failed</strong><br/>Попытка подключения кошелька завершилась неудачей — приложение продолжит работу в режиме симуляции.</div>');
+        ev.preventDefault && ev.preventDefault();
+      } else {
+        console.error('Unhandled error', ev);
       }
+    });
+    window.addEventListener('unhandledrejection', function(ev){
+      const reason = ev && ev.reason ? ev.reason : ev;
+      const msg = reason && reason.message ? reason.message : String(reason);
+      if(/MetaMask|Failed to connect/i.test(msg)){
+        showBanner('<div class="error-banner"><strong>MetaMask connection failed</strong><br/>Попытка подключения кошелька завершилась неудачей — приложение продолжит работу в режиме симуляции.</div>');
+        ev.preventDefault && ev.preventDefault();
+      } else {
+        console.error('Unhandled rejection', ev);
+      }
+    });
+  })();
 
-    })();
+  // RNG / data generators
+  function seededRandom(seed){ let t = seed % 2147483647; if (t <= 0) t += 2147483646; return function(){ t = (t * 16807) % 2147483647; return (t - 1) / 2147483646; }; }
+  function generateTimeSeries(seedBase = 42, points = 48, startValue = 100, volatility = 0.03, multiplier = 1){
+    const rand = seededRandom(seedBase + Math.floor(Date.now()/1000));
+    let v = startValue;
+    const arr = [];
+    for(let i=0;i<points;i++){
+      const change = (rand()-0.5)*2*volatility;
+      v = Math.max(0, v*(1+change)) + (rand()-0.5)*multiplier;
+      arr.push({t:i, value: Number(v.toFixed(4))});
+    }
+    return arr;
+  }
+  function generateTopMiners(seed=7,count=8){
+    const rand=seededRandom(seed+Math.floor(Date.now()/3600));
+    const miners=[];
+    for(let i=0;i<count;i++){
+      miners.push({ id:'t0'+Math.floor(rand()*1e7).toString(16), powerPiB: +(Math.max(0.1, rand()*50)).toFixed(2), activeDeals: Math.floor(rand()*1200) });
+    }
+    miners.sort((a,b)=>b.powerPiB-a.powerPiB);
+    return miners;
+  }
+
+  function buildFakeSnapshot(){
+    const net = generateTimeSeries(1234,48,15000,0.02,50).map(x=>({t:x.t, value:+x.value.toFixed(4)}));
+    const deals = generateTimeSeries(5,48,240000,0.01,10);
+    const fil = generateTimeSeries(99,48,3.5,0.04,0.4);
+    const retrieval = generateTimeSeries(77,48,98.5,0.002,0.1);
+    const user = generateTimeSeries(202,48,12,0.03,0.5);
+    return { epoch: Math.floor(220000 + Math.random()*12000), blockHeight: Math.floor(15e6 + Math.random()*20000), networkPower: net, dealCount: deals, filPrice: fil, retrievalSuccessRate: retrieval, userData: user };
+  }
+
+  function prettyNum(x){ if (x>=1e12) return (x/1e12).toFixed(2)+'T'; if (x>=1e9) return (x/1e9).toFixed(2)+'B'; if (x>=1e6) return (x/1e6).toFixed(2)+'M'; if (x>=1e3) return (x/1e3).toFixed(2)+'K'; return Number(x).toFixed(2); }
+
+  // state
+  let state = { data: buildFakeSnapshot(), miners: generateTopMiners(), mode: 'simulate', range: '48h' };
+  let netChart=null, userChart=null, pieChart=null;
+  let tickIntervalId = null;
+
+  // Chart creation
+  function createCharts(){
+    if(typeof Chart === 'undefined'){ document.getElementById('status').textContent = 'Chart.js not loaded'; return; }
+    const netCtx = document.getElementById('networkChart').getContext('2d');
+    netChart = new Chart(netCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Network PiB', data: [], borderColor: '#0ea5a4', backgroundColor: 'rgba(14,165,164,0.08)', fill: true, tension:0.3 },
+          { label: 'Deals', data: [], borderColor: '#60a5fa', tension:0.3 },
+          { label: 'FIL', data: [], borderColor: '#f97316', tension:0.3 }
+        ]
+      },
+      options: { animation:false, plugins:{ legend:{display:true}}, scales:{ x:{display:false}, y:{beginAtZero:false} } }
+    });
+
+    const userCtx = document.getElementById('userChart').getContext('2d');
+    userChart = new Chart(userCtx, {
+      type:'line',
+      data:{ labels:[], datasets:[
+        {label:'User GB', data:[], borderColor:'#84cc16', tension:0.2, fill:false},
+        {label:'Retrieval %', data:[], borderColor:'#06b6d4', tension:0.2, yAxisID:'p', fill:false}
+      ]},
+      options:{ animation:false, plugins:{ legend:{display:true} }, scales:{ p:{ position:'right', min:0, max:100 } } }
+    });
+
+    const pieCtx = document.getElementById('pieChart').getContext('2d');
+    pieChart = new Chart(pieCtx, { type:'pie', data:{ labels:[], datasets:[{ data:[], backgroundColor:[ '#60a5fa','#0ea5a4','#f97316','#84cc16','#a78bfa','#fb7185','#f59e0b','#34d399' ] }] }, options:{ animation:false, plugins:{ legend:{display:false} } } });
+  }
+
+  function updateFromState(){
+    try{
+      const d = state.data;
+      if(!netChart || !userChart || !pieChart) return;
+      const labels = d.networkPower.map(p=>p.t);
+      netChart.data.labels = labels;
+      netChart.data.datasets[0].data = d.networkPower.map(p=>p.value);
+      netChart.data.datasets[1].data = d.dealCount.map(p=>p.value);
+      netChart.data.datasets[2].data = d.filPrice.map(p=>p.value);
+      netChart.update();
+
+      userChart.data.labels = d.userData.map(p=>p.t);
+      userChart.data.datasets[0].data = d.userData.map(p=>p.value);
+      userChart.data.datasets[1].data = d.retrievalSuccessRate.map(p=>p.value);
+      userChart.update();
+
+      pieChart.data.labels = state.miners.map(m=>m.id);
+      pieChart.data.datasets[0].data = state.miners.map(m=>m.powerPiB);
+      pieChart.update();
+
+      document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+      document.getElementById('epoch').textContent = '#'+d.epoch;
+      const lastNet = d.networkPower.length ? d.networkPower[d.networkPower.length-1].value : 0;
+      document.getElementById('statPower').textContent = prettyNum(lastNet) + ' PiB';
+      document.getElementById('statDeals').textContent = Math.round(d.dealCount[d.dealCount.length-1].value || 0);
+      document.getElementById('statFil').textContent = '$' + (d.filPrice[d.filPrice.length-1].value || 0).toFixed(2);
+
+      // build miners list safely (no raw newline in code)
+      const minersHtml = state.miners.map(m => {
+        return `<div class="flex justify-between py-1"><div class="truncate mr-2">${m.id}</div><div class="text-right">${m.powerPiB} PiB<br/><span class="text-slate-400 text-xs">${m.activeDeals} deals</span></div></div>`;
+      }).join('');
+      document.getElementById('minersList').innerHTML = minersHtml;
+
+      const lastPoint = d.userData.length ? d.userData[d.userData.length-1].value : 0;
+      document.getElementById('qBlock').textContent = prettyNum(d.blockHeight);
+      document.getElementById('qRetrieval').textContent = (d.retrievalSuccessRate[d.retrievalSuccessRate.length-1].value || 0).toFixed(2) + '%';
+      document.getElementById('qUser').textContent = lastPoint.toFixed(2) + ' GB';
+      document.getElementById('qDeals').textContent = Math.round(d.dealCount[d.dealCount.length-1].value || 0);
+    }catch(e){
+      console.error('updateFromState failed', e);
+      document.getElementById('status').textContent = 'update failed: '+String(e.message || e);
+    }
+  }
+
+  function tickSimulate(){
+    try{
+      const next = state.data;
+      next.epoch++;
+      next.blockHeight += Math.floor(0.9 + Math.random()*2.1);
+      function step(series, mult=1, lb=0){
+        const last = series.length ? series[series.length-1].value : 1;
+        const noise = (Math.random()-0.5)*2*0.02*mult*last;
+        const val = Math.max(lb, Number((last + noise).toFixed(6)));
+        series.push({t: series.length ? series[series.length-1].t+1 : 0, value: val});
+        if(series.length>96) series.shift();
+      }
+      step(next.networkPower, 1, 0);
+      step(next.dealCount, 1.02, 0);
+      step(next.filPrice, 1.05, 0);
+      step(next.retrievalSuccessRate, 0.005, 95);
+      step(next.userData, 0.5, 0);
+      state.data = next;
+      updateFromState();
+    }catch(e){
+      console.warn('tickSimulate error', e);
+    }
+  }
+
+  // CSV export (fixed: use '\n' and safe JSON quoting)
+  function exportCSV(){
+    try{
+      const d = state.data;
+      const rows=[];
+      const len = Math.max(d.networkPower.length, d.dealCount.length, d.filPrice.length);
+      for(let i=0;i<len;i++){
+        rows.push({
+          t:i,
+          networkPower_PiB: d.networkPower[i]?.value ?? '',
+          dealCount: d.dealCount[i]?.value ?? '',
+          fil: d.filPrice[i]?.value ?? '',
+          retrievalRate: d.retrievalSuccessRate[i]?.value ?? '',
+          userData_GB: d.userData[i]?.value ?? ''
+        });
+      }
+      const keys = Object.keys(rows[0] || {});
+      const csv = [keys.join(',')].concat(rows.map(r=> keys.map(k=>JSON.stringify(r[k]??'')).join(','))).join('\n');
+      const blob = new Blob([csv], {type:'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href=url; a.download='filecoin_metrics.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }catch(e){
+      console.error('exportCSV failed', e);
+      showBanner && showBanner('<div class="error-banner">Export failed: '+String(e.message || e)+'</div>');
+    }
+  }
+
+  // snapshot
+  function snapshot(){
+    try{
+      const net = document.getElementById('networkChart');
+      if(!net) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = net.width; canvas.height = net.height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width, canvas.height);
+      ctx.drawImage(net,0,0);
+      const png = canvas.toDataURL('image/png');
+      const a = document.createElement('a'); a.href = png; a.download = 'filecoin_metrics_snapshot.png'; a.click();
+    }catch(e){
+      console.error('snapshot failed', e);
+    }
+  }
+
+  // UI wiring - wait for DOM
+  (function wiring(){
+    try{
+      const refreshBtn = document.getElementById('refreshBtn');
+      const toggleMode = document.getElementById('toggleMode');
+      const exportCsvBtn = document.getElementById('exportCsv');
+      const snapshotBtn = document.getElementById('snapshotBtn');
+      const reshuffle = document.getElementById('reshuffle');
+      const reset = document.getElementById('reset');
+      const rangeBtns = document.querySelectorAll('.rangeBtn');
+
+      refreshBtn && refreshBtn.addEventListener('click', ()=>{ if(state.mode==='simulate'){ state.data = buildFakeSnapshot(); state.miners = generateTopMiners(); updateFromState(); } else { state.data = buildFakeSnapshot(); state.miners = generateTopMiners(); updateFromState(); } });
+      toggleMode && toggleMode.addEventListener('click', ()=>{ state.mode = state.mode==='simulate' ? 'live' : 'simulate'; document.getElementById('toggleMode').textContent = state.mode; });
+      exportCsvBtn && exportCsvBtn.addEventListener('click', exportCSV);
+      snapshotBtn && snapshotBtn.addEventListener('click', snapshot);
+      reshuffle && reshuffle.addEventListener('click', ()=>{ state.miners = generateTopMiners(); updateFromState(); });
+      reset && reset.addEventListener('click', ()=>{ state.data = buildFakeSnapshot(); updateFromState(); });
+      rangeBtns && rangeBtns.forEach(b=> b.addEventListener('click',(e)=>{ document.querySelectorAll('.rangeBtn').forEach(x=>x.classList.remove('bg-slate-800','text-white')); e.target.classList.add('bg-slate-800','text-white'); state.range = e.target.dataset.range; document.getElementById('rangeLabel').textContent = state.range; }));
+    }catch(e){
+      console.error('wiring failed', e);
+    }
+  })();
+
+  // init flow
+  (function init(){
+    try{
+      setStatus('initializing');
+      createCharts();
+      updateFromState();
+      // initial tick to show change
+      try{ tickSimulate(); }catch(e){ console.warn('initial tickSimulate failed', e); }
+      // single interval for simulation ticks
+      if(tickIntervalId) clearInterval(tickIntervalId);
+      tickIntervalId = setInterval(()=>{ if(state.mode==='simulate') tickSimulate(); }, 2000);
+      setStatus('running');
+      console.info('Filecoin metrics demo started');
+    }catch(e){
+      console.error('init failed', e);
+      document.getElementById('status').textContent = 'init error: '+String(e.message || e);
+    }
+  })();
+
   </script>
 </body>
 </html>

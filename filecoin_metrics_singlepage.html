@@ -1,0 +1,325 @@
+<!--
+File: Filecoin-metrics-singlepage.html
+Purpose: Robust single-file SPA for Filecoin metrics. This rewrite specifically addresses the reported
+MetaMask connection failure ("Failed to connect to MetaMask") by making the page resilient to
+wallet injection errors and promise rejections, preventing those errors from blanking the page.
+
+Key fixes in this rewrite:
+- Global handlers for `error` and `unhandledrejection` that treat MetaMask/connect failures as non-fatal
+  and show a friendly banner instead of replacing the entire UI with an error.
+- A `patchEthereum` wrapper that safely wraps injected `window.ethereum` methods to normalize returns
+  and avoid unhandled exceptions escaping into the global runtime.
+- A defensive `defineProperty` setter for `window.ethereum` (when possible) to catch future injections,
+  plus a polling fallback for environments where redefine isn't possible.
+- A resilient dynamic loader for React/ReactDOM/Recharts with multiple CDN fallbacks.
+- A static fallback UI (no-React) if CDN libs cannot be loaded (so the page never stays blank).
+- Careful use of `\n` for CSV joins and no use of `Array.at` to maximize compatibility.
+
+How to use: save this file into your repo and open it with HTTP (GitHub Pages or static server). If
+you open via file:// some CDNs may block; use a local static server or GitHub Pages.
+-->
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Filecoin Metrics — Single Page (robust)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html,body,#root{height:100%}
+    body{background:linear-gradient(180deg,#f8fafc,#eef2ff);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial}
+    .error-banner{background:#fee2e2;color:#991b1b;padding:12px;border-radius:8px;margin-bottom:16px}
+    .info-banner{background:#eef2ff;color:#0f172a;padding:10px;border-radius:8px;margin-bottom:12px}
+  </style>
+</head>
+<body>
+  <div id="root" class="p-6 max-w-6xl mx-auto"></div>
+
+  <script>
+  (function(){
+    const rootEl = document.getElementById('root');
+
+    function showBanner(type, html){
+      try {
+        const node = document.createElement('div');
+        node.className = type === 'error' ? 'error-banner' : 'info-banner';
+        node.innerHTML = html;
+        // Ensure banner doesn't replace page content
+        const first = rootEl.firstChild;
+        if (first) rootEl.insertBefore(node, first);
+        else rootEl.appendChild(node);
+        return node;
+      } catch(e){ console.warn('showBanner failed', e); }
+    }
+
+    window.__renderRuntimeError = function(title, details){
+      try {
+        console.error(title, details);
+        rootEl.innerHTML = '';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'bg-white rounded-xl shadow p-6';
+        wrapper.innerHTML = '<h2 style="margin:0 0 8px 0">Ошибка на странице</h2>' +
+          '<div style="color:#475569;font-size:13px;line-height:1.4">' +
+          (title ? ('<strong>' + String(title) + '</strong><br/>') : '') +
+          'Откройте консоль (F12) для деталей.</div>';
+        rootEl.appendChild(wrapper);
+        if (details) console.debug(details);
+      } catch(e){ console.error('Failed to render runtime error UI', e); }
+    };
+
+    // Handle synchronous errors globally
+    window.addEventListener('error', function(ev){
+      try {
+        const message = (ev && (ev.message || (ev.error && ev.error.message))) ? (ev.message || ev.error.message) : String(ev);
+        if (/MetaMask|Failed to connect/i.test(String(message))) {
+          showBanner('error', '<strong>MetaMask connection failed</strong><br/>Похоже, расширение пыталось подключиться и не получилось. Интерфейс продолжит работать в режиме симуляции.');
+          console.warn('Intercepted MetaMask error:', ev.error || ev);
+          ev.preventDefault && ev.preventDefault();
+          return;
+        }
+        // Non-wallet errors: show full runtime error UI
+        window.__renderRuntimeError('Runtime error: ' + message, ev.error || ev);
+        ev.preventDefault && ev.preventDefault();
+      } catch(e) { console.error('error handler crashed', e); }
+    });
+
+    // Handle promise rejections globally
+    window.addEventListener('unhandledrejection', function(ev){
+      try {
+        const reason = ev && ev.reason ? ev.reason : ev;
+        const message = reason && reason.message ? reason.message : String(reason);
+        if (/MetaMask|Failed to connect/i.test(String(message))) {
+          showBanner('error', '<strong>MetaMask connection failed</strong><br/>Видимо, расширение попыталось подключиться и не получилось. Продолжаем в режиме симуляции.');
+          console.warn('Intercepted MetaMask rejection:', reason);
+          ev.preventDefault && ev.preventDefault();
+          return;
+        }
+        window.__renderRuntimeError('Unhandled rejection: ' + message, reason);
+        ev.preventDefault && ev.preventDefault();
+      } catch(e) { console.error('unhandledrejection handler crashed', e); }
+    });
+
+    // Patch ethereum safely when it appears (wraps functions to normalize returns and catch throws)
+    function patchEthereum(eth) {
+      try {
+        if (!eth || eth.__patched_by_filecoin_metrics__) return;
+        Object.defineProperty(eth, '__patched_by_filecoin_metrics__', { value: true, writable: false, configurable: true });
+
+        const fnNames = ['request','send','sendAsync','enable','on','addListener','removeListener'];
+        fnNames.forEach(fn => {
+          if (typeof eth[fn] === 'function') {
+            const orig = eth[fn].bind(eth);
+            eth[fn] = function(...args){
+              try {
+                const result = orig(...args);
+                // Normalize to Promise if possible
+                if (result && typeof result.then === 'function') return result;
+                return Promise.resolve(result);
+              } catch(err) {
+                console.warn('ethereum.' + fn + ' threw:', err);
+                return Promise.reject(err);
+              }
+            };
+          }
+        });
+
+        // Optional: listen for connect/disconnect events to show info
+        try {
+          if (typeof eth.on === 'function') {
+            try { eth.on('connect', () => showBanner('info', '<strong>Wallet connected</strong>')); } catch(_){}
+            try { eth.on('disconnect', () => showBanner('info', '<strong>Wallet disconnected</strong>')); } catch(_){}
+          }
+        } catch(e) { /* ignore */ }
+
+        console.debug('Patched window.ethereum safely');
+      } catch(e) { console.warn('patchEthereum failed', e); }
+    }
+
+    // If possible, install a setter on window.ethereum to intercept future injections
+    (function installEthereumSetter(){
+      try {
+        const desc = Object.getOwnPropertyDescriptor(window, 'ethereum');
+        if (!desc || desc.configurable) {
+          // keep internal reference and wrap assignment
+          let internalEth = window.ethereum;
+          Object.defineProperty(window, 'ethereum', {
+            configurable: true,
+            enumerable: true,
+            get() { return internalEth; },
+            set(v) { internalEth = v; try { patchEthereum(internalEth); } catch(e){ console.warn('setter patch failed', e); } return internalEth; }
+          });
+          if (window.ethereum) patchEthereum(window.ethereum);
+          return;
+        }
+      } catch(e) { console.warn('installEthereumSetter failed', e); }
+      // fallback: poll for ethereum presence for a while
+      try {
+        let waited = 0;
+        const iv = setInterval(()=>{
+          if (window.ethereum) { patchEthereum(window.ethereum); clearInterval(iv); }
+          waited += 250; if (waited > 15000) clearInterval(iv);
+        }, 250);
+      } catch(e) { console.warn('ethereum poll failed', e); }
+    })();
+
+    // Dynamic loader with fallback CDNs
+    function loadScript(url){
+      return new Promise((resolve,reject)=>{
+        const s = document.createElement('script'); s.src = url; s.async = false; s.crossOrigin = 'anonymous';
+        s.onload = () => resolve(url);
+        s.onerror = (e) => reject(new Error('Failed to load ' + url));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function tryLoad(urls){
+      let lastErr = null;
+      for (const u of urls){
+        try { await loadScript(u); return u; } catch(e) { lastErr = e; console.warn(e); }
+      }
+      throw lastErr || new Error('No candidates');
+    }
+
+    (async function initUi(){
+      const reactCandidates = [
+        'https://unpkg.com/react@18/umd/react.production.min.js',
+        'https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js'
+      ];
+      const reactDomCandidates = [
+        'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+        'https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js'
+      ];
+      const rechartsCandidates = [
+        'https://unpkg.com/recharts/umd/Recharts.min.js',
+        'https://cdn.jsdelivr.net/npm/recharts/umd/Recharts.min.js'
+      ];
+
+      try {
+        await tryLoad(reactCandidates);
+        await tryLoad(reactDomCandidates);
+        await tryLoad(rechartsCandidates);
+      } catch(err) {
+        console.error('Failed to load UI libraries', err);
+        // Minimal fallback UI
+        rootEl.innerHTML = '';
+        const box = document.createElement('div');
+        box.className = 'bg-white rounded-xl shadow p-6';
+        box.innerHTML = '<h2 style="margin:0 0 8px 0">Filecoin Metrics — FallBack</h2>' +
+          '<p style="color:#475569">Не удалось загрузить React/Recharts с CDN. Возможно заблокирован доступ к unpkg/jsdelivr. Вы можете: (1) открыть страницу с отключёнными расширениями, (2) скачать этот HTML и поместить UMD-бандлы локально рядом с файлом, или (3) воспользоваться другим устройством/сетью.</p>' +
+          '<div style="margin-top:12px"><button id="fallbackCsv" class="px-3 py-1 border rounded">Скачать демо CSV</button></div>';
+        rootEl.appendChild(box);
+        document.getElementById('fallbackCsv').addEventListener('click', ()=>{
+          const rows = [ {t:0, networkPower_PiB: 15000, dealCount: 240000, fil: 3.5, retrievalRate: 98.5, userData_GB: 12} ];
+          const keys = Object.keys(rows[0]);
+          const csv = [keys.join(',')].concat(rows.map(r => keys.map(k=>JSON.stringify(r[k]||'')).join(','))).join('\n');
+          const b = new Blob([csv], {type:'text/csv'}); const url = URL.createObjectURL(b); const a = document.createElement('a'); a.href=url; a.download='filecoin_demo.csv'; a.click(); URL.revokeObjectURL(url);
+        });
+        return;
+      }
+
+      if (!window.React || !window.ReactDOM || !window.Recharts) {
+        window.__renderRuntimeError('Loaded scripts but required globals not found', { hasReact:!!window.React, hasReactDOM:!!window.ReactDOM, hasRecharts:!!window.Recharts });
+        return;
+      }
+
+      // At this point we've loaded UMD globals and patched ethereum if present
+      try {
+        const React = window.React;
+        const ReactDOM = window.ReactDOM;
+        const Recharts = window.Recharts;
+        const { useState, useEffect, useRef, useMemo } = React;
+        const { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } = Recharts;
+
+        // Utilities
+        function seededRandom(seed) { let t = seed % 2147483647; if (t <= 0) t += 2147483646; return function(){ t = (t * 16807) % 2147483647; return (t - 1) / 2147483646; }; }
+        function generateTimeSeries(seedBase = 42, points = 48, startValue = 100, volatility = 0.03, multiplier = 1) {
+          const rand = seededRandom(seedBase + Math.floor(Date.now() / 1000)); let v = startValue; const arr = [];
+          for (let i=0;i<points;i++){ const change = (rand()-0.5)*2*volatility; v = Math.max(0, v*(1+change)) + (rand()-0.5)*multiplier; arr.push({t:i, value:Number(v.toFixed(4))}); }
+          return arr;
+        }
+        function prettyNum(x){ if (x>=1e12) return (x/1e12).toFixed(2)+'T'; if (x>=1e9) return (x/1e9).toFixed(2)+'B'; if (x>=1e6) return (x/1e6).toFixed(2)+'M'; if (x>=1e3) return (x/1e3).toFixed(2)+'K'; return Number(x).toFixed(2); }
+        function generateTopMiners(seed=7,count=8){ const rand=seededRandom(seed+Math.floor(Date.now()/3600)); const miners=[]; for(let i=0;i<count;i++){ miners.push({id:'t0'+Math.floor(rand()*1e7).toString(16), powerPiB: +(Math.max(0.1, rand()*50)).toFixed(2), activeDeals: Math.floor(rand()*1200)}); } miners.sort((a,b)=>b.powerPiB-a.powerPiB); return miners; }
+        function exportCSV(filename, rows){ if(!rows||!rows.length){ alert('Нет данных для экспорта'); return; } const keys=Object.keys(rows[0]); const csv=[keys.join(',')].concat(rows.map(r=>keys.map(k=>JSON.stringify(r[k]??'')).join(','))).join('\n'); const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
+
+        // Component
+        function FilecoinMetrics(){
+          const [mode,setMode]=useState('simulate');
+          const [range,setRange]=useState('48h');
+          const [address,setAddress]=useState('');
+          const [lastUpdated,setLastUpdated]=useState(Date.now());
+          const [data,setData]=useState(buildFakeSnapshot());
+          const [miners,setMiners]=useState(generateTopMiners());
+          const [refreshing,setRefreshing]=useState(false);
+          const chartRef = useRef(null);
+
+          useEffect(()=>{
+            const iv = setInterval(()=>{ if(mode==='simulate') tick(); }, 4200);
+            return ()=>clearInterval(iv);
+          }, [mode]);
+
+          function tick(){ setData(prev=>{ const next={...prev}; next.epoch++; next.blockHeight+=Math.floor(0.9+Math.random()*2.1); next.networkPower = shiftAndAppend(next.networkPower, simulatedStep(next.networkPower)); next.dealCount = shiftAndAppend(next.dealCount, simulatedStep(next.dealCount,1.02)); next.filPrice = shiftAndAppend(next.filPrice, simulatedStep(next.filPrice,1.05)); next.retrievalSuccessRate = shiftAndAppend(next.retrievalSuccessRate, simulatedStep(next.retrievalSuccessRate,0.005,95)); next.userData = shiftAndAppend(next.userData, simulatedStep(next.userData,0.5)); setLastUpdated(Date.now()); return next; }); }
+          function simulatedStep(series,multiplier=1,lowerBound=0){ const last = (series && series.length) ? series[series.length-1].value : 1; const noise=(Math.random()-0.5)*2*0.02*multiplier*last; return Math.max(lowerBound, Number((last+noise).toFixed(6))); }
+          function shiftAndAppend(series,newVal){ const arr = Array.isArray(series) ? series.slice() : []; arr.push({ t: arr.length>0 ? arr[arr.length-1].t+1 : 0, value: newVal }); if (arr.length>96) arr.shift(); return arr; }
+
+          function buildFakeSnapshot(){ const net = generateTimeSeries(1234,48,15000,0.02,50).map(x=>({t:x.t,value:+x.value.toFixed(4)})); const deals = generateTimeSeries(5,48,240000,0.01,10); const fil = generateTimeSeries(99,48,3.5,0.04,0.4); const retrieval = generateTimeSeries(77,48,98.5,0.002,0.1); const user = generateTimeSeries(202,48,12,0.03,0.5); return { epoch: Math.floor(220000 + Math.random()*12000), blockHeight: Math.floor(15e6 + Math.random()*20000), networkPower: net, dealCount: deals, filPrice: fil, retrievalSuccessRate: retrieval, userData: user } }
+
+          async function refresh(){ setRefreshing(true); try{ if(mode==='live'){ await new Promise(r=>setTimeout(r,700)); tick(); } else { await new Promise(r=>setTimeout(r,300)); setData(buildFakeSnapshot()); setMiners(generateTopMiners()); } } finally { setRefreshing(false); setLastUpdated(Date.now()); } }
+
+          function onExportCSV(){ const rows=[]; const len = Math.max(data.networkPower.length, data.dealCount.length, data.filPrice.length); for(let i=0;i<len;i++){ rows.push({t:i, networkPower_PiB: data.networkPower[i]?.value ?? '', dealCount: data.dealCount[i]?.value ?? '', fil: data.filPrice[i]?.value ?? '', retrievalRate: data.retrievalSuccessRate[i]?.value ?? '', userData_GB: data.userData[i]?.value ?? ''}); } exportCSV('filecoin_metrics.csv', rows); }
+
+          function snapshotPNG(){ const svg = chartRef.current && chartRef.current.querySelector ? chartRef.current.querySelector('svg') : null; if(!svg) return alert('График не найден'); const serializer=new XMLSerializer(); const svgStr=serializer.serializeToString(svg); const canvas=document.createElement('canvas'); canvas.width = svg.clientWidth*2; canvas.height = svg.clientHeight*2; const ctx=canvas.getContext('2d'); const img=new Image(); const svgBlob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'}); const url=URL.createObjectURL(svgBlob); img.onload=()=>{ ctx.drawImage(img,0,0,canvas.width,canvas.height); const pngUrl = canvas.toDataURL('image/png'); const a=document.createElement('a'); a.href=pngUrl; a.download='filecoin_metrics_snapshot.png'; a.click(); URL.revokeObjectURL(url); }; img.src=url; }
+
+          const seriesForChart = useMemo(()=>{ const len = Math.max(data.networkPower.length, data.dealCount.length, data.filPrice.length); const arr=[]; for(let i=0;i<len;i++){ arr.push({ t:'#'+i, power: Number((data.networkPower[i]?.value ?? 0).toFixed(4)), deals: Number((data.dealCount[i]?.value ?? 0).toFixed(4)), fil: Number((data.filPrice[i]?.value ?? 0).toFixed(4)), retrieval: Number((data.retrievalSuccessRate[i]?.value ?? 0).toFixed(4)), userData: Number((data.userData[i]?.value ?? 0).toFixed(4)) }); } return arr; }, [data]);
+
+          const lastPoint = seriesForChart.length ? seriesForChart[seriesForChart.length-1] : null;
+          const topPie = useMemo(()=>{ const total = miners.reduce((s,m)=>s+m.powerPiB,0)||1; return miners.map(m=>({ name:m.id, value: +(m.powerPiB/total*100).toFixed(2) })); }, [miners]);
+
+          return React.createElement('div',{className:'p-4 bg-white rounded-2xl shadow'},
+            React.createElement('div',{className:'flex items-center justify-between mb-4'},
+              React.createElement('div',{className:'flex items-center gap-3'}, folderIcon(), React.createElement('div',null, React.createElement('div',{className:'font-semibold'},'Filecoin Metrics'), React.createElement('div',{className:'text-xs text-slate-500'},'Сеть • Экономика • Состояние данных'))),
+              React.createElement('div',{className:'flex items-center gap-2'}, React.createElement('div',{className:'flex items-center border rounded-lg px-2 py-1 gap-2'}, searchIcon(), React.createElement('input',{value:address,onChange:e=>setAddress(e.target.value),placeholder:'Wallet / Deal ID (optional)',className:'outline-none text-xs bg-transparent'})), React.createElement('button',{onClick:()=>setMode(prev=> prev==='simulate' ? 'live' : 'simulate'), className:'flex items-center gap-2 px-3 py-1 rounded-lg border'}, toggleIcon(mode), React.createElement('span',null,mode)), React.createElement('button',{onClick:refresh,className:'flex items-center gap-2 px-3 py-1 rounded-lg border'}, refreshIcon(), React.createElement('span',null, refreshing ? '...' : 'Refresh')), React.createElement('button',{onClick:onExportCSV,title:'Export CSV',className:'px-2 py-1 border rounded-lg'}, downloadIcon()))),
+
+            React.createElement('div',{className:'grid grid-cols-1 md:grid-cols-3 gap-4'},
+              React.createElement('div',{className:'col-span-2 bg-slate-50 rounded-xl p-3', ref: chartRef}, React.createElement('div',{className:'flex items-center justify-between mb-2'}, React.createElement('div',{className:'text-sm font-medium'}, 'Сетевые метрики'), React.createElement('div',{className:'text-xs text-slate-500'}, 'Обновлено: ' + new Date(lastUpdated).toLocaleTimeString())), React.createElement('div',{style:{height:300}}, React.createElement(ResponsiveContainer, {width:'100%', height:'100%'}, React.createElement(AreaChart, {data:seriesForChart, margin:{top:8,right:24,left:0,bottom:8}}, React.createElement('defs',null, React.createElement('linearGradient',{id:'g1', x1:'0', y1:'0', x2:'0', y2:'1'}, React.createElement('stop',{offset:'5%', stopOpacity:0.6}), React.createElement('stop',{offset:'95%', stopOpacity:0.05}))), React.createElement(XAxis,{dataKey:'t', hide:true}), React.createElement(YAxis,{yAxisId:'left', orientation:'left', tickFormatter:v=>prettyNum(v)}), React.createElement(Tooltip,null), React.createElement(Area,{yAxisId:'left', type:'monotone', dataKey:'power', stroke:'#0ea5a4', fillOpacity:1, fill:'url(#g1)'}), React.createElement(Line,{yAxisId:'left', type:'monotone', dataKey:'deals', stroke:'#60a5fa', dot:false, strokeWidth:1.5}), React.createElement(Line',{yAxisId:'left', type:'monotone', dataKey:'fil', stroke:'#f97316', dot:false, strokeWidth:1.5})))), React.createElement('div',{className:'grid grid-cols-3 gap-3 mt-3'}, statCard('Network Power', `${prettyNum(lastPoint ? lastPoint.power : 0)} PiB`, 'Total raw power'), statCard('Active Deals', `${Math.round(lastPoint ? lastPoint.deals : 0)}`, 'Deals in last period'), statCard('FIL Price', `$${(lastPoint ? lastPoint.fil : 0).toFixed(2)}`, 'Market price (sim)'))),
+
+              React.createElement('div',{className:'bg-slate-50 rounded-xl p-3'}, React.createElement('div',{className:'flex items-center justify-between mb-2'}, React.createElement('div',{className:'text-sm font-medium'}, 'Экономика'), React.createElement('div',{className:'text-xs text-slate-500'}, 'Epoch #' + data.epoch)), React.createElement('div',{style:{height:150}}, React.createElement(ResponsiveContainer,{width:'100%', height:'100%'}, React.createElement(PieChart,null, React.createElement(Pie,{data:topPie, dataKey:'value', nameKey:'name', innerRadius:28, outerRadius:60, paddingAngle:3, label:()=>null}, topPie.map((entry,idx)=> React.createElement(Cell,{key:'c-'+idx}))), React.createElement(Legend,{verticalAlign:'bottom', height:36})))), React.createElement('div',{className:'mt-2 text-sm text-slate-500'}, 'Top miners by power (simulated)'), React.createElement('div',{className:'mt-3 space-y-2 max-h-48 overflow-auto'}, miners.map(m=> React.createElement('div',{key:m.id, className:'flex items-center justify-between text-xs'}, React.createElement('div',{className:'truncate'}, m.id), React.createElement('div',{className:'text-right'}, React.createElement('div',null, m.powerPiB + ' PiB'), React.createElement('div',{className:'text-slate-400'}, m.activeDeals + ' deals'))))))
+            ),
+
+            React.createElement('div',{className:'mt-4 grid grid-cols-1 md:grid-cols-3 gap-3'}, React.createElement('div',{className:'col-span-2 bg-slate-50 rounded-xl p-3'}, React.createElement('div',{className:'flex items-center justify-between mb-2'}, React.createElement('div',{className:'text-sm font-medium'}, 'Данные пользователя'), React.createElement('div',{className:'text-xs text-slate-500'}, 'Последние ' + range)), React.createElement('div',{style:{height:160}}, React.createElement(ResponsiveContainer,{width:'100%', height:'100%'}, React.createElement(LineChart,{data:seriesForChart, margin:{top:8,right:12,left:0,bottom:8}}, React.createElement(XAxis,{dataKey:'t', hide:true}), React.createElement(YAxis,{tickFormatter:v=>v.toFixed(2) + ' GB'}), React.createElement(Tooltip,null), React.createElement(Line,{dataKey:'userData', stroke:'#84cc16', dot:false}), React.createElement(Line,{dataKey:'retrieval', stroke:'#06b6d4', dot:false})))), React.createElement('div',{className:'flex items-center gap-3 mt-3'}, React.createElement('div',{className:'text-xs'}, 'Time range:'), React.createElement('div',{className:'flex gap-2'}, ['24h','48h','7d','30d'].map(r=> React.createElement('button',{key:r, onClick:()=>setRange(r), className:'px-2 py-1 rounded ' + (range===r ? 'bg-slate-800 text-white' : 'border')}, r))), React.createElement('div',{className:'ml-auto flex gap-2'}, React.createElement('button',{onClick:snapshotPNG, className:'px-3 py-1 border rounded'}, 'Snapshot'), React.createElement('button',{onClick:onExportCSV, className:'px-3 py-1 border rounded'}, 'Export CSV')))), React.createElement('div',{className:'bg-slate-50 rounded-xl p-3'}, React.createElement('div',{className:'text-sm font-medium mb-2'}, 'Quick metrics'), React.createElement('div',{className:'grid grid-cols-2 gap-2 text-xs'}, metric('Block height', prettyNum(data.blockHeight)), metric('Retrieval %', (lastPoint ? lastPoint.retrieval : 0).toFixed(2) + '%'), metric('User stored (GB)', (lastPoint ? lastPoint.userData : 0).toFixed(2)), metric('Deal count', Math.round(lastPoint ? lastPoint.deals : 0))), React.createElement('div',{className:'mt-3 text-xs text-slate-500'}, 'Settings'), React.createElement('div',{className:'mt-2 flex gap-2'}, React.createElement('button',{onClick:()=>setMiners(generateTopMiners()), className:'px-2 py-1 border rounded'}, 'Reshuffle miners'), React.createElement('button',{onClick:()=>{ setData(buildFakeSnapshot()); setLastUpdated(Date.now()); }, className:'px-2 py-1 border rounded'}, 'Reset snapshot')))),
+
+            React.createElement('div',{className:'mt-3 text-xs text-slate-400'}, 'Примечание: все данные по умолчанию симулируются. Переключитесь в режим "live" и подключите реальный API для получения живых метрик.')
+          );
+
+          // inner helpers
+          function statCard(title,value,hint){ return React.createElement('div',{className:'bg-white border p-2 rounded flex flex-col'}, React.createElement('div',{className:'text-xs text-slate-500'}, title), React.createElement('div',{className:'font-semibold'}, value), React.createElement('div',{className:'text-xs text-slate-400'}, hint)); }
+          function metric(label,value){ return React.createElement('div',{className:'border rounded p-2'}, React.createElement('div',{className:'text-slate-500 text-[11px]'}, label), React.createElement('div',{className:'font-medium'}, value)); }
+          function folderIcon(){ return React.createElement('svg',{width:24,height:24,viewBox:'0 0 24 24',fill:'none',xmlns:'http://www.w3.org/2000/svg'}, React.createElement('path',{d:'M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z', stroke:'#0f172a', strokeWidth:1.2, fill:'rgba(15,23,42,0.04)'})); }
+          function searchIcon(){ return React.createElement('svg',{width:14,height:14,viewBox:'0 0 24 24',fill:'none',xmlns:'http://www.w3.org/2000/svg'}, React.createElement('path',{d:'M21 21l-4.35-4.35', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round'}), React.createElement('circle',{cx:11, cy:11, r:6, stroke:'#475569', strokeWidth:1.5})); }
+          function toggleIcon(mode){ return React.createElement('svg',{width:16,height:16,viewBox:'0 0 24 24',fill:'none',xmlns:'http://www.w3.org/2000/svg'}, React.createElement('rect',{x:3,y:7,width:18,height:10,rx:5, stroke:'#475569', strokeWidth:1.2, fill: mode==='simulate' ? 'rgba(15,23,42,0.06)' : 'rgba(96,165,250,0.08)'})); }
+          function refreshIcon(){ return React.createElement('svg',{width:14,height:14,viewBox:'0 0 24 24',fill:'none',xmlns:'http://www.w3.org/2000/svg'}, React.createElement('path',{d:'M21 12a9 9 0 1 0-3.2 6.4L21 21', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round'})); }
+          function downloadIcon(){ return React.createElement('svg',{width:14,height:14,viewBox:'0 0 24 24',fill:'none',xmlns:'http://www.w3.org/2000/svg'}, React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round'}), React.createElement('path',{d:'M7 10l5 5 5-5', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round'}), React.createElement('path',{d:'M12 15V3', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round'})); }
+
+        }
+
+        // mount
+        try {
+          if (ReactDOM.createRoot) {
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(React.createElement(FilecoinMetrics));
+          } else {
+            ReactDOM.render(React.createElement(FilecoinMetrics), document.getElementById('root'));
+          }
+        } catch(err) {
+          window.__renderRuntimeError('Ошибка при инициализации React приложения', err && err.stack ? err.stack : err);
+        }
+
+      } catch(err) {
+        window.__renderRuntimeError('Ошибка при запуске UI', err && err.stack ? err.stack : err);
+      }
+
+    })();
+
+  })();
+  </script>
+</body>
+</html>

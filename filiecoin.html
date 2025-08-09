@@ -1,0 +1,172 @@
+<!--
+Single-file SPA: Filecoin Metrics (UMD builds)
+Fix: switched from ESM imports to UMD/unpkg builds for React, ReactDOM and Recharts.
+Cause of original error: multiple React copies / hooks dispatcher being null when Recharts used a different React instance (common with mixed ESM CDN bundles). Using UMD globals ensures a single React runtime and fixes "reading 'useState' of null".
+
+- Drop this file into a GitHub Pages branch (root or docs/).
+- Data is simulated by default. Replace `refresh()` implementation to connect to your backend or real Filecoin APIs.
+-->
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Filecoin Metrics — Single Page (UMD)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>html,body,#root{height:100%} body{background:linear-gradient(180deg,#f8fafc,#eef2ff)}</style>
+</head>
+<body>
+  <div id="root" class="p-6"></div>
+
+  <!-- Use UMD builds so React instance is shared with Recharts -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+
+  <script>
+    (function(){
+      const React = window.React;
+      const ReactDOM = window.ReactDOM;
+      const Recharts = window.Recharts;
+      const { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } = Recharts;
+
+      // --- Helpers ---
+      function seededRandom(seed) {
+        let t = seed % 2147483647;
+        if (t <= 0) t += 2147483646;
+        return function() { t = (t * 16807) % 2147483647; return (t - 1) / 2147483646; };
+      }
+      function generateTimeSeries(seedBase = 42, points = 48, startValue = 100, volatility = 0.03, multiplier = 1) {
+        const rand = seededRandom(seedBase + Math.floor(Date.now() / 1000));
+        let v = startValue; const arr = [];
+        for (let i = 0; i < points; i++) {
+          const change = (rand() - 0.5) * 2 * volatility;
+          v = Math.max(0, v * (1 + change)) + (rand() - 0.5) * multiplier;
+          arr.push({ t: i, value: Number(v.toFixed(4)) });
+        }
+        return arr;
+      }
+      function prettyNum(x) {
+        if (x >= 1e12) return (x / 1e12).toFixed(2) + 'T';
+        if (x >= 1e9) return (x / 1e9).toFixed(2) + 'B';
+        if (x >= 1e6) return (x / 1e6).toFixed(2) + 'M';
+        if (x >= 1e3) return (x / 1e3).toFixed(2) + 'K';
+        return Number(x).toFixed(2);
+      }
+      function generateTopMiners(seed = 7, count = 8) {
+        const rand = seededRandom(seed + Math.floor(Date.now() / 3600));
+        const miners = [];
+        for (let i = 0; i < count; i++) miners.push({
+          id: 't0' + Math.floor(rand() * 1e7).toString(16),
+          powerPiB: +(Math.max(0.1, rand() * 50)).toFixed(2),
+          activeDeals: Math.floor(rand() * 1200),
+        });
+        miners.sort((a,b)=>b.powerPiB-a.powerPiB); return miners;
+      }
+      function exportCSV(filename, rows) {
+        const keys = Object.keys(rows[0] || {});
+        const csv = [keys.join(',')].concat(rows.map(r => keys.map(k => JSON.stringify(r[k] ?? '')).join(','))).join('
+');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+      }
+
+      // --- FilecoinMetrics component (React.createElement style) ---
+      const { useState, useEffect, useRef, useMemo } = React;
+
+      function FilecoinMetrics(){
+        const [mode, setMode] = useState('simulate');
+        const [range, setRange] = useState('48h');
+        const [address, setAddress] = useState('');
+        const [lastUpdated, setLastUpdated] = useState(Date.now());
+        const [data, setData] = useState(buildFakeSnapshot());
+        const [miners, setMiners] = useState(generateTopMiners());
+        const [refreshing, setRefreshing] = useState(false);
+        const chartRef = useRef(null);
+
+        useEffect(()=>{
+          const iv = setInterval(()=>{ if (mode==='simulate') tick(); }, 4200);
+          return ()=>clearInterval(iv);
+        }, [mode, data]);
+
+        function tick(){
+          setData(prev=>{
+            const next = {...prev}; next.epoch++; next.blockHeight += Math.floor(0.9 + Math.random()*2.1);
+            next.networkPower = shiftAndAppend(next.networkPower, simulatedStep(next.networkPower));
+            next.dealCount = shiftAndAppend(next.dealCount, simulatedStep(next.dealCount,1.02));
+            next.filPrice = shiftAndAppend(next.filPrice, simulatedStep(next.filPrice,1.05));
+            next.retrievalSuccessRate = shiftAndAppend(next.retrievalSuccessRate, simulatedStep(next.retrievalSuccessRate,0.005,95));
+            next.userData = shiftAndAppend(next.userData, simulatedStep(next.userData,0.5));
+            setLastUpdated(Date.now()); return next;
+          });
+        }
+        function simulatedStep(series, multiplier=1, lowerBound=0){ const last = series[series.length-1]?.value ?? 1; const noise=(Math.random()-0.5)*2*0.02*multiplier*last; return Math.max(lowerBound, Number((last+noise).toFixed(6))); }
+        function shiftAndAppend(series,newVal){ const arr=series.slice(); arr.push({t: arr.length>0?arr[arr.length-1].t+1:0, value: newVal}); if(arr.length>96) arr.shift(); return arr; }
+        function buildFakeSnapshot(){ const net = generateTimeSeries(1234,48,15000,0.02,50).map(x=>({t:x.t,value:+x.value.toFixed(4)})); const deals = generateTimeSeries(5,48,240000,0.01,10); const fil = generateTimeSeries(99,48,3.5,0.04,0.4); const retrieval = generateTimeSeries(77,48,98.5,0.002,0.1); const user = generateTimeSeries(202,48,12,0.03,0.5); return { epoch: Math.floor(220000 + Math.random()*12000), blockHeight: Math.floor(15e6 + Math.random()*20000), networkPower: net, dealCount: deals, filPrice: fil, retrievalSuccessRate: retrieval, userData: user } }
+
+        async function refresh(){ setRefreshing(true); try{ if(mode==='live'){ await new Promise(r=>setTimeout(r,700)); tick(); } else { await new Promise(r=>setTimeout(r,300)); setData(buildFakeSnapshot()); setMiners(generateTopMiners()); } } finally { setRefreshing(false); setLastUpdated(Date.now()); } }
+
+        function onExportCSV(){ const rows=[]; const len = Math.max(data.networkPower.length, data.dealCount.length, data.filPrice.length); for(let i=0;i<len;i++){ rows.push({ t:i, networkPower_PiB: data.networkPower[i]?.value ?? '', dealCount: data.dealCount[i]?.value ?? '', fil: data.filPrice[i]?.value ?? '', retrievalRate: data.retrievalSuccessRate[i]?.value ?? '', userData_GB: data.userData[i]?.value ?? '' }); } exportCSV('filecoin_metrics.csv', rows); }
+        function snapshotPNG(){ const svg = chartRef.current?.querySelector('svg'); if(!svg) return alert('График не найден'); const serializer = new XMLSerializer(); const svgStr = serializer.serializeToString(svg); const canvas = document.createElement('canvas'); canvas.width = svg.clientWidth*2; canvas.height = svg.clientHeight*2; const ctx = canvas.getContext('2d'); const img = new Image(); const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' }); const url = URL.createObjectURL(svgBlob); img.onload = ()=>{ ctx.drawImage(img,0,0,canvas.width,canvas.height); const pngUrl = canvas.toDataURL('image/png'); const a = document.createElement('a'); a.href = pngUrl; a.download = 'filecoin_metrics_snapshot.png'; a.click(); URL.revokeObjectURL(url); }; img.src = url; }
+
+        const seriesForChart = useMemo(()=>{ const len = Math.max(data.networkPower.length, data.dealCount.length, data.filPrice.length); const arr = []; for (let i=0;i<len;i++) arr.push({ t:`#${i}`, power: Number((data.networkPower[i]?.value ?? 0).toFixed(4)), deals: Number((data.dealCount[i]?.value ?? 0).toFixed(4)), fil: Number((data.filPrice[i]?.value ?? 0).toFixed(4)), retrieval: Number((data.retrievalSuccessRate[i]?.value ?? 0).toFixed(4)), userData: Number((data.userData[i]?.value ?? 0).toFixed(4)), }); return arr; }, [data]);
+
+        const topPie = useMemo(()=>{ const total = miners.reduce((s,m)=>s+m.powerPiB,0)||1; return miners.map(m=>({ name:m.id, value: +(m.powerPiB/total*100).toFixed(2) })); }, [miners]);
+
+        // Render
+        return React.createElement('div', { className: 'p-4 bg-white rounded-2xl shadow' },
+          React.createElement('div', { className: 'flex items-center justify-between mb-4' },
+            React.createElement('div', { className: 'flex items-center gap-3' }, folderIcon(), React.createElement('div', null, React.createElement('div', { className: 'font-semibold' }, 'Filecoin Metrics'), React.createElement('div', { className: 'text-xs text-slate-500' }, 'Сеть • Экономика • Состояние данных'))),
+            React.createElement('div', { className: 'flex items-center gap-2' },
+              React.createElement('div', { className: 'flex items-center border rounded-lg px-2 py-1 gap-2' }, searchIcon(), React.createElement('input', { value: address, onChange: e=>setAddress(e.target.value), placeholder: 'Wallet / Deal ID (optional)', className: 'outline-none text-xs bg-transparent' })),
+              React.createElement('button', { onClick: ()=>setMode(prev=> prev==='simulate' ? 'live' : 'simulate'), className: 'flex items-center gap-2 px-3 py-1 rounded-lg border' }, toggleIcon(mode), React.createElement('span', null, mode)),
+              React.createElement('button', { onClick: refresh, className: 'flex items-center gap-2 px-3 py-1 rounded-lg border' }, refreshIcon(), React.createElement('span', null, refreshing ? '...' : 'Refresh')),
+              React.createElement('button', { onClick: onExportCSV, title: 'Export CSV', className: 'px-2 py-1 border rounded-lg' }, downloadIcon())
+            )
+          ),
+
+          React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+            React.createElement('div', { className: 'col-span-2 bg-slate-50 rounded-xl p-3', ref: chartRef },
+              React.createElement('div', { className: 'flex items-center justify-between mb-2' }, React.createElement('div', { className: 'text-sm font-medium' }, 'Сетевые метрики'), React.createElement('div', { className: 'text-xs text-slate-500' }, 'Обновлено: ' + new Date(lastUpdated).toLocaleTimeString())),
+              React.createElement('div', { style: { height: 300 } }, React.createElement(ResponsiveContainer, { width: '100%', height: '100%' }, React.createElement(AreaChart, { data: seriesForChart, margin: { top: 8, right: 24, left: 0, bottom: 8 } }, React.createElement('defs', null, React.createElement('linearGradient', { id: 'g1', x1: '0', y1: '0', x2: '0', y2: '1' }, React.createElement('stop', { offset: '5%', stopOpacity: 0.6 }), React.createElement('stop', { offset: '95%', stopOpacity: 0.05 }))), React.createElement(XAxis, { dataKey: 't', hide: true }), React.createElement(YAxis, { yAxisId: 'left', orientation: 'left', tickFormatter: v => prettyNum(v) }), React.createElement(Tooltip, null), React.createElement(Area, { yAxisId: 'left', type: 'monotone', dataKey: 'power', stroke: '#0ea5a4', fillOpacity: 1, fill: 'url(#g1)' }), React.createElement(Line, { yAxisId: 'left', type: 'monotone', dataKey: 'deals', stroke: '#60a5fa', dot: false, strokeWidth: 1.5 }), React.createElement(Line, { yAxisId: 'left', type: 'monotone', dataKey: 'fil', stroke: '#f97316', dot: false, strokeWidth: 1.5 })))),
+              React.createElement('div', { className: 'grid grid-cols-3 gap-3 mt-3' }, statCard('Network Power', `${prettyNum(seriesForChart.at(-1)?.power ?? 0)} PiB`, 'Total raw power'), statCard('Active Deals', `${Math.round(seriesForChart.at(-1)?.deals ?? 0)}`, 'Deals in last period'), statCard('FIL Price', `$${(seriesForChart.at(-1)?.fil ?? 0).toFixed(2)}`, 'Market price (sim)'))
+            ),
+
+            React.createElement('div', { className: 'bg-slate-50 rounded-xl p-3' },
+              React.createElement('div', { className: 'flex items-center justify-between mb-2' }, React.createElement('div', { className: 'text-sm font-medium' }, 'Экономика'), React.createElement('div', { className: 'text-xs text-slate-500' }, 'Epoch #' + data.epoch)),
+              React.createElement('div', { style: { height: 150 } }, React.createElement(ResponsiveContainer, { width: '100%', height: '100%' }, React.createElement(PieChart, null, React.createElement(Pie, { data: topPie, dataKey: 'value', nameKey: 'name', innerRadius: 28, outerRadius: 60, paddingAngle: 3, label: ()=>null }, topPie.map((entry, idx)=> React.createElement(Cell, { key: 'c-'+idx }))), React.createElement(Legend, { verticalAlign: 'bottom', height: 36 })))), React.createElement('div', { className: 'mt-2 text-sm text-slate-500' }, 'Top miners by power (simulated)'), React.createElement('div', { className: 'mt-3 space-y-2 max-h-48 overflow-auto' }, miners.map(m => React.createElement('div', { key: m.id, className: 'flex items-center justify-between text-xs' }, React.createElement('div', { className: 'truncate' }, m.id), React.createElement('div', { className: 'text-right' }, React.createElement('div', null, m.powerPiB + ' PiB'), React.createElement('div', { className: 'text-slate-400' }, m.activeDeals + ' deals'))))))
+          ),
+
+          React.createElement('div', { className: 'mt-4 grid grid-cols-1 md:grid-cols-3 gap-3' },
+            React.createElement('div', { className: 'col-span-2 bg-slate-50 rounded-xl p-3' }, React.createElement('div', { className: 'flex items-center justify-between mb-2' }, React.createElement('div', { className: 'text-sm font-medium' }, 'Данные пользователя'), React.createElement('div', { className: 'text-xs text-slate-500' }, 'Последние ' + range)), React.createElement('div', { style: { height: 160 } }, React.createElement(ResponsiveContainer, { width: '100%', height: '100%' }, React.createElement(LineChart, { data: seriesForChart, margin: { top: 8, right: 12, left: 0, bottom: 8 } }, React.createElement(XAxis, { dataKey: 't', hide: true }), React.createElement(YAxis, { tickFormatter: v => v.toFixed(2) + ' GB' }), React.createElement(Tooltip, null), React.createElement(Line, { dataKey: 'userData', stroke: '#84cc16', dot: false }), React.createElement(Line, { dataKey: 'retrieval', stroke: '#06b6d4', dot: false })))), React.createElement('div', { className: 'flex items-center gap-3 mt-3' }, React.createElement('div', { className: 'text-xs' }, 'Time range:'), React.createElement('div', { className: 'flex gap-2' }, ['24h','48h','7d','30d'].map(r => React.createElement('button', { key: r, onClick: ()=>setRange(r), className: 'px-2 py-1 rounded ' + (range===r ? 'bg-slate-800 text-white' : 'border') }, r))), React.createElement('div', { className: 'ml-auto flex gap-2' }, React.createElement('button', { onClick: snapshotPNG, className: 'px-3 py-1 border rounded' }, 'Snapshot'), React.createElement('button', { onClick: onExportCSV, className: 'px-3 py-1 border rounded' }, 'Export CSV')))),
+
+            React.createElement('div', { className: 'bg-slate-50 rounded-xl p-3' }, React.createElement('div', { className: 'text-sm font-medium mb-2' }, 'Quick metrics'), React.createElement('div', { className: 'grid grid-cols-2 gap-2 text-xs' }, metric('Block height', prettyNum(data.blockHeight)), metric('Retrieval %', (seriesForChart.at(-1)?.retrieval ?? 0).toFixed(2) + '%'), metric('User stored (GB)', (seriesForChart.at(-1)?.userData ?? 0).toFixed(2)), metric('Deal count', Math.round(seriesForChart.at(-1)?.deals ?? 0))), React.createElement('div', { className: 'mt-3 text-xs text-slate-500' }, 'Settings'), React.createElement('div', { className: 'mt-2 flex gap-2' }, React.createElement('button', { onClick: ()=>setMiners(generateTopMiners()), className: 'px-2 py-1 border rounded' }, 'Reshuffle miners'), React.createElement('button', { onClick: ()=>{ setData(buildFakeSnapshot()); setLastUpdated(Date.now()); }, className: 'px-2 py-1 border rounded' }, 'Reset snapshot')))
+          ),
+
+          React.createElement('div', { className: 'mt-3 text-xs text-slate-400' }, 'Примечание: все данные по умолчанию симулируются. Переключитесь в режим "live" и подключите реальный API для получения живых метрик.')
+        );
+
+        // --- inner helper functions used above ---
+        function statCard(title, value, hint){ return React.createElement('div', { className: 'bg-white border p-2 rounded flex flex-col' }, React.createElement('div', { className: 'text-xs text-slate-500' }, title), React.createElement('div', { className: 'font-semibold' }, value), React.createElement('div', { className: 'text-xs text-slate-400' }, hint)); }
+        function metric(label, value){ return React.createElement('div', { className: 'border rounded p-2' }, React.createElement('div', { className: 'text-slate-500 text-[11px]' }, label), React.createElement('div', { className: 'font-medium' }, value)); }
+        function folderIcon(){ return React.createElement('svg', { width:24, height:24, viewBox:'0 0 24 24', fill:'none', xmlns:'http://www.w3.org/2000/svg' }, React.createElement('path', { d:'M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z', stroke:'#0f172a', strokeWidth:1.2, fill:'rgba(15,23,42,0.04)' })); }
+        function searchIcon(){ return React.createElement('svg', { width:14, height:14, viewBox:'0 0 24 24', fill:'none', xmlns:'http://www.w3.org/2000/svg' }, React.createElement('path', { d:'M21 21l-4.35-4.35', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' }), React.createElement('circle', { cx:11, cy:11, r:6, stroke:'#475569', strokeWidth:1.5 })); }
+        function toggleIcon(mode){ return React.createElement('svg', { width:16, height:16, viewBox:'0 0 24 24', fill:'none', xmlns:'http://www.w3.org/2000/svg' }, React.createElement('rect', { x:3, y:7, width:18, height:10, rx:5, stroke:'#475569', strokeWidth:1.2, fill: mode==='simulate' ? 'rgba(15,23,42,0.06)' : 'rgba(96,165,250,0.08)' })); }
+        function refreshIcon(){ return React.createElement('svg', { width:14, height:14, viewBox:'0 0 24 24', fill:'none', xmlns:'http://www.w3.org/2000/svg' }, React.createElement('path', { d:'M21 12a9 9 0 1 0-3.2 6.4L21 21', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' })); }
+        function downloadIcon(){ return React.createElement('svg', { width:14, height:14, viewBox:'0 0 24 24', fill:'none', xmlns:'http://www.w3.org/2000/svg' }, React.createElement('path', { d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' }), React.createElement('path', { d:'M7 10l5 5 5-5', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' }), React.createElement('path', { d:'M12 15V3', stroke:'#475569', strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' })); }
+
+      }
+
+      // --- Render to DOM ---
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(React.createElement(FilecoinMetrics));
+
+      // small helpers used in component scope but declared here to keep code compact
+      function simulatedStep(series, multiplier=1, lowerBound=0){ const last = series[series.length-1]?.value ?? 1; const noise=(Math.random()-0.5)*2*0.02*multiplier*last; return Math.max(lowerBound, Number((last+noise).toFixed(6))); }
+      function shiftAndAppend(series,newVal){ const arr=series.slice(); arr.push({t: arr.length>0?arr[arr.length-1].t+1:0, value: newVal}); if(arr.length>96) arr.shift(); return arr; }
+      function buildFakeSnapshot(){ const net = generateTimeSeries(1234,48,15000,0.02,50).map(x=>({t:x.t,value:+x.value.toFixed(4)})); const deals = generateTimeSeries(5,48,240000,0.01,10); const fil = generateTimeSeries(99,48,3.5,0.04,0.4); const retrieval = generateTimeSeries(77,48,98.5,0.002,0.1); const user = generateTimeSeries(202,48,12,0.03,0.5); return { epoch: Math.floor(220000 + Math.random()*12000), blockHeight: Math.floor(15e6 + Math.random()*20000), networkPower: net, dealCount: deals, filPrice: fil, retrievalSuccessRate: retrieval, userData: user } }
+
+    })();
+  </script>
+</body>
+</html>

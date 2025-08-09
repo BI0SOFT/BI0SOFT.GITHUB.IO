@@ -8,18 +8,15 @@
   <link rel="stylesheet" href="css/styles.css">
     <style>
         .grid-container {
-            display: grid;
-            /* 4 колонки с равной шириной */
-            grid-template-columns: repeat(4, 1fr);
-            /* 3 строки с равной высотой */
-            grid-template-rows: repeat(3, 1fr);
-            gap: 12px; /* Расстояние между ячейками */
-            max-width: 1200px; /* Максимальная ширина контейнера */
-            margin: 0 auto; /* Центрирование */
-            padding: 15px;
-            aspect-ratio: 4/3; /* Соотношение ширины и высоты (4:3) */
+         display: grid;
+         grid-template-columns: repeat(4, 1fr);
+         grid-template-rows: repeat(3, 1fr);
+         gap: 12px;
+         max-width: 1290px;
+         margin: 0 auto;
+         aspect-ratio: 4 / 3;
+         width: 100%;
         }
-
         .grid-item {
             background-color: #f0f0f0;
             border: 1px solid #ddd;
@@ -28,10 +25,8 @@
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
-            aspect-ratio: 1/1; /* Квадратные ячейки */
+            aspect-ratio: 1/1;
         }
-
-        /* Адаптивность для мобильных устройств */
         @media (max-width: 768px) {
             .grid-container {
                 /* Меняем на 2 колонки на маленьких экранах */
@@ -41,7 +36,6 @@
                 aspect-ratio: auto;
             }
         }
-
         /* Для экранов уже 480px */
         @media (max-width: 480px) {
             .grid-container {

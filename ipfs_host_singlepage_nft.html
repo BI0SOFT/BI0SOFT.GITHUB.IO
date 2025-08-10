@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>IPFS Host — Single Page (nft.storage)</title>
-  <meta name="description" content="Single-file HTML+JS для загрузки статических сайтов в IPFS через nft.storage (client-side demo).">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>IPFS Host — Lighthouse (client-side demo)</title>
+  <meta name="description" content="Single-file HTML uploader to Lighthouse.Storage with simple encrypted API key (XOR+base64)." />
   <style>
     :root{--bg1:#071021;--bg2:#0f2230;--muted:#9aa4b2;--accent:#06b6d4}
-    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,System-ui,-apple-system,'Segoe UI',Roboto,Arial;color:#e6eef6}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial;color:#e6eef6}
     body{background:linear-gradient(180deg,var(--bg1),var(--bg2));display:flex;align-items:flex-start;justify-content:center;padding:28px}
     .card{width:100%;max-width:980px;background:rgba(255,255,255,0.03);border-radius:12px;padding:18px;box-shadow:0 10px 30px rgba(2,6,23,0.6)}
     h1{margin:0;font-size:20px}
@@ -32,19 +32,15 @@
   <div class="card">
     <header style="display:flex;justify-content:space-between;align-items:center">
       <div>
-        <h1>IPFS Host — Single Page</h1>
-        <p class="lead">Клиентская версия для загрузки папки/набора файлов в <strong>nft.storage</strong> и получения CID. Для продакшена используйте серверный прокси.</p>
+        <h1>IPFS Host — Lighthouse</h1>
+        <p class="lead">Клиентская версия для загрузки папки/файлов в <strong>lighthouse.storage</strong>. Ключ хранится в коде в простом шифрованном виде (XOR+Base64) и расшифровывается только перед использованием.</p>
       </div>
-      <div class="small">Supports folder upload (webkitdirectory)</div>
+      <div class="small">Простой обфускация ключа — не замена безопасному хранению на сервере.</div>
     </header>
 
     <main>
       <label for="project">Имя проекта (опционально)</label>
       <input id="project" type="text" placeholder="my-static-site">
-
-      <label for="token">NFT.Storage API Key</label>
-      <input id="token" type="password" placeholder="Вставьте NFT.Storage API key сюда (не публикуйте)">
-      <div class="small" style="margin-top:6px">Если нет ключа — получите на <a href="https://nft.storage" target="_blank" rel="noreferrer">nft.storage</a> (вход через GitHub).</div>
 
       <label>Файлы / Папка</label>
       <div id="drop" class="drop" tabindex="0">Перетащите папку или файлы сюда<br><span class="small" style="display:block;margin-top:8px;color:var(--muted)">Поддерживается выбор папки через браузеры на базе Chromium (выберите папку при клике).</span></div>
@@ -54,7 +50,7 @@
       <div id="files" class="files">Пока нет выбранных файлов</div>
 
       <div class="row">
-        <button id="deploy" class="btn">Deploy to IPFS (nft.storage)</button>
+        <button id="deploy" class="btn">Deploy to Lighthouse</button>
         <button id="clear" class="btn ghost">Очистить</button>
       </div>
 
@@ -63,139 +59,161 @@
       <div id="result" style="display:none">
         <div class="cid"><strong>CID:</strong> <span id="cid"></span></div>
         <div class="gateways" id="gateways"></div>
-        <div style="margin-top:8px" class="small">Подсказка: для корректной загрузки убедитесь, что в корне папки есть <code>index.html</code>.</div>
+        <div style="margin-top:8px" class="small">Подсказка: для корректного хостинга убедитесь, что в корне папки есть <code>index.html</code>.</div>
       </div>
     </main>
 
-    <footer style="margin-top:14px" class="small">© IPFS Host SPA — client-side demo · nft.storage</footer>
+    <footer style="margin-top:14px" class="small">© IPFS Host SPA — client-side demo · lighthouse.storage</footer>
   </div>
 
 <script>
-  // Single-file HTML uploader for nft.storage
-  // WARNING: This demo uses client-side API key. Do not embed production keys into public pages.
+/* Simple cipher: XOR with a short salt then base64. This is obfuscation only. */
+const ENCRYPTED_KEY = 'FwNVZFAQbRFuDRBGUlo2C0w8RHVfQBUKB2tXQ2hFIwhBEQBXYldGOUI='; // base64 of key XOR salt
+const SALT = 's3cR3t_s@lt'; // same salt used to encrypt (must be present to decrypt)
 
-  const dirInput = document.getElementById('dirInput');
-  const fileInput = document.getElementById('fileInput');
-  const drop = document.getElementById('drop');
-  const filesEl = document.getElementById('files');
-  const deployBtn = document.getElementById('deploy');
-  const clearBtn = document.getElementById('clear');
-  const tokenInput = document.getElementById('token');
-  const statusEl = document.getElementById('status');
-  const result = document.getElementById('result');
-  const cidEl = document.getElementById('cid');
-  const gatewaysEl = document.getElementById('gateways');
-
-  let currentFiles = [];
-
-  function humanSize(bytes){
-    if(bytes < 1024) return bytes + ' B';
-    if(bytes < 1024*1024) return Math.round(bytes/1024) + ' KB';
-    return (bytes/1024/1024).toFixed(2) + ' MB';
-  }
-
-  function renderFileList(){
-    if(!currentFiles.length){ filesEl.textContent = 'Пока нет выбранных файлов'; return }
-    filesEl.innerHTML = '';
-    const ul = document.createElement('ul'); ul.style.margin='0'; ul.style.padding='0 0 0 18px';
-    currentFiles.slice(0,1000).forEach(f=>{
-      const li = document.createElement('li'); li.style.marginBottom='6px';
-      const name = f.webkitRelativePath || f.name;
-      li.textContent = name + ' • ' + humanSize(f.size);
-      ul.appendChild(li);
-    });
-    filesEl.appendChild(ul);
-  }
-
-  drop.addEventListener('click', ()=>{
-    // try directory first (webkitdirectory)
-    dirInput.click();
-  });
-
-  // support drag/drop
-  ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{ e.preventDefault(); drop.classList.add('drag'); }));
-  ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{ e.preventDefault(); drop.classList.remove('drag'); }));
-
-  drop.addEventListener('drop', e=>{
-    e.preventDefault();
-    const dt = e.dataTransfer;
-    if(dt && dt.files && dt.files.length){
-      currentFiles = Array.from(dt.files);
-      renderFileList();
+function decryptKey(b64) {
+  try {
+    const raw = atob(b64);
+    const salt = SALT;
+    let res = '';
+    for(let i=0;i<raw.length;i++){
+      const c = raw.charCodeAt(i) ^ salt.charCodeAt(i % salt.length);
+      res += String.fromCharCode(c);
     }
-  });
-
-  dirInput.addEventListener('change', e=>{
-    currentFiles = Array.from(e.target.files || []);
-    renderFileList();
-  });
-  fileInput.addEventListener('change', e=>{
-    currentFiles = Array.from(e.target.files || []);
-    renderFileList();
-  });
-
-  clearBtn.addEventListener('click', ()=>{
-    currentFiles = [];
-    dirInput.value = '';
-    fileInput.value = '';
-    renderFileList();
-    statusEl.textContent = 'Очищено';
-    result.style.display = 'none';
-  });
-
-  async function uploadToNft(files, token){
-    const form = new FormData();
-    files.forEach(f=>{
-      const name = f.webkitRelativePath || f.name;
-      form.append('file[]', f, name);
-    });
-
-    const r = await fetch('https://api.nft.storage/upload', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token },
-      body: form
-    });
-    const json = await r.json();
-    if(!r.ok) throw new Error(json.error || JSON.stringify(json));
-    // nft.storage might return { ok:true, value:{cid:...} } or { cid: '...' }
-    return json.cid || (json.value && json.value.cid) || (json.ok && json.value && json.value.cid);
+    return res;
+  } catch (e) {
+    console.error('decrypt error', e);
+    return null;
   }
+}
 
-  deployBtn.addEventListener('click', async ()=>{
-    statusEl.textContent = 'Подготовка...';
-    if(!currentFiles.length){ statusEl.textContent = 'Нет файлов для загрузки.'; return }
-    const token = tokenInput.value.trim();
-    if(!token){ statusEl.textContent = 'Укажите NFT.Storage API key.'; return }
+// Elements
+const dirInput = document.getElementById('dirInput');
+const fileInput = document.getElementById('fileInput');
+const drop = document.getElementById('drop');
+const filesEl = document.getElementById('files');
+const deployBtn = document.getElementById('deploy');
+const clearBtn = document.getElementById('clear');
+const statusEl = document.getElementById('status');
+const cidEl = document.getElementById('cid');
+const gatewaysEl = document.getElementById('gateways');
+const result = document.getElementById('result');
 
-    try{
-      deployBtn.disabled = true;
-      statusEl.textContent = 'Загрузка файлов в nft.storage — это может занять время...';
-      const cid = await uploadToNft(currentFiles, token);
-      if(!cid) throw new Error('CID не получен в ответе');
-      statusEl.textContent = 'Успешно — CID: ' + cid;
-      cidEl.textContent = cid;
-      gatewaysEl.innerHTML = '';
-      const gateways = [
-        { label: 'dweb.link (subdomain)', url: `https://${cid}.ipfs.dweb.link/` },
-        { label: 'ipfs.io (path)', url: `https://ipfs.io/ipfs/${cid}/` },
-        { label: 'cloudflare', url: `https://cloudflare-ipfs.com/ipfs/${cid}/` },
-        { label: 'w3s.link', url: `https://w3s.link/ipfs/${cid}/` }
-      ];
-      gateways.forEach(g=>{
-        const el = document.createElement('div'); el.className='gateway';
-        el.innerHTML = `<strong>${g.label}:</strong><br><a href="${g.url}" target="_blank" rel="noreferrer">${g.url}</a>`;
-        gatewaysEl.appendChild(el);
-      });
-      result.style.display = 'block';
-    }catch(err){
-      console.error(err);
-      statusEl.textContent = 'Ошибка: ' + (err.message || err);
-      result.style.display = 'none';
-    }finally{ deployBtn.disabled = false }
+let currentFiles = [];
+
+function humanSize(bytes){
+  if(bytes < 1024) return bytes + ' B';
+  if(bytes < 1024*1024) return Math.round(bytes/1024) + ' KB';
+  return (bytes/1024/1024).toFixed(2) + ' MB';
+}
+
+function renderFileList(){
+  if(!currentFiles.length){ filesEl.textContent = 'Пока нет выбранных файлов'; return }
+  filesEl.innerHTML = '';
+  const ul = document.createElement('ul'); ul.style.margin='0'; ul.style.padding='0 0 0 18px';
+  currentFiles.slice(0,1000).forEach(f=>{
+    const li = document.createElement('li'); li.style.marginBottom='6px';
+    const name = f.webkitRelativePath || f.name;
+    li.textContent = name + ' • ' + humanSize(f.size);
+    ul.appendChild(li);
+  });
+  filesEl.appendChild(ul);
+}
+
+// drag/drop handlers
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{ e.preventDefault(); drop.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{ e.preventDefault(); drop.classList.remove('drag'); }));
+
+drop.addEventListener('click', ()=> dirInput.click());
+
+drop.addEventListener('drop', e=>{
+  e.preventDefault();
+  const dt = e.dataTransfer;
+  if(dt && dt.files && dt.files.length){
+    currentFiles = Array.from(dt.files);
+    renderFileList();
+  }
+});
+
+dirInput.addEventListener('change', e=>{ currentFiles = Array.from(e.target.files || []); renderFileList(); });
+fileInput.addEventListener('change', e=>{ currentFiles = Array.from(e.target.files || []); renderFileList(); });
+
+clearBtn.addEventListener('click', ()=>{
+  currentFiles = [];
+  dirInput.value = '';
+  fileInput.value = '';
+  renderFileList();
+  statusEl.textContent = 'Очищено';
+  result.style.display = 'none';
+});
+
+async function uploadToLighthouse(files, apiKey) {
+  // Lighthouse expects multipart/form-data to /api/v0/add
+  const fd = new FormData();
+  files.forEach(f=>{
+    const name = f.webkitRelativePath || f.name;
+    fd.append('file', f, name);
   });
 
-  // initial render
-  renderFileList();
+  const res = await fetch('https://node.lighthouse.storage/api/v0/add', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + apiKey
+    },
+    body: fd
+  });
+
+  const json = await res.json();
+  if(!res.ok) throw new Error(json?.message || JSON.stringify(json));
+  // Lighthouse returns object with 'Hash' or 'Hash' per file; sometimes returns array line-delimited
+  // Try to extract cid
+  if(json && json.Hash) return json.Hash;
+  if(Array.isArray(json) && json.length && json[json.length-1].Hash) return json[json.length-1].Hash;
+  // sometimes API returns {Cid: { '/': 'bafy...' } }
+  if(json && json.Cid && json.Cid['/']) return json.Cid['/'];
+  // fallback: look for any string that looks like bafy
+  const s = JSON.stringify(json);
+  const m = s.match(/bafy[a-z0-9]{20,}/i);
+  if(m) return m[0];
+  throw new Error('CID not found in response: ' + s);
+}
+
+deployBtn.addEventListener('click', async ()=>{
+  statusEl.textContent = 'Подготовка...';
+  if(!currentFiles.length){ statusEl.textContent = 'Нет файлов для загрузки.'; return }
+
+  // decrypt key just-in-time
+  const apiKey = decryptKey(ENCRYPTED_KEY);
+  if(!apiKey){ statusEl.textContent = 'Не удалось расшифровать ключ.'; return }
+
+  try{
+    deployBtn.disabled = true;
+    statusEl.textContent = 'Загрузка в Lighthouse — это может занять время...';
+    const cid = await uploadToLighthouse(currentFiles, apiKey);
+    statusEl.textContent = 'Успешно — CID: ' + cid;
+    cidEl.textContent = cid;
+
+    gatewaysEl.innerHTML = '';
+    const gateways = [
+      { label: 'dweb.link (subdomain)', url: `https://${cid}.ipfs.dweb.link/` },
+      { label: 'ipfs.io (path)', url: `https://ipfs.io/ipfs/${cid}/` },
+      { label: 'cloudflare', url: `https://cloudflare-ipfs.com/ipfs/${cid}/` },
+    ];
+    gateways.forEach(g=>{
+      const el = document.createElement('div'); el.className='gateway';
+      el.innerHTML = `<strong>${g.label}:</strong><br><a href="${g.url}" target="_blank" rel="noreferrer">${g.url}</a>`;
+      gatewaysEl.appendChild(el);
+    });
+    result.style.display = 'block';
+  }catch(err){
+    console.error(err);
+    statusEl.textContent = 'Ошибка: ' + (err.message || err);
+    result.style.display = 'none';
+  }finally{ deployBtn.disabled = false }
+});
+
+// initial render
+renderFileList();
 </script>
 </body>
 </html>

@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>IP / Web камера хаб + ffmpeg.wasm</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    a { color: #38bdf8; }
+    #app {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 12px;
+      padding-bottom: 48px;
+    }
+    header {
+      margin-bottom: 12px;
+      border-bottom: 1px solid #1f2937;
+      padding-bottom: 8px;
+    }
+    h1 { font-size: 18px; margin: 0 0 6px; }
+    p { margin: 4px 0; font-size: 13px; }
+    small { font-size: 12px; color: #9ca3af; }
+    #header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    #ffmpeg-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 200px;
+    }
+    .led {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #4b5563;
+      box-shadow: 0 0 0 1px #020617;
+    }
+    .led-ok {
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+    }
+    .led-loading {
+      background: #eab308;
+      box-shadow: 0 0 8px #eab308;
+    }
+    .led-error {
+      background: #ef4444;
+      box-shadow: 0 0 8px #ef4444;
+    }
+    #ffmpeg-progress {
+      flex: 1;
+      height: 6px;
+      border-radius: 999px;
+      background: #020617;
+      border: 1px solid #1f2937;
+      overflow: hidden;
+    }
+    #ffmpeg-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #38bdf8, #22c55e);
+      transition: width 0.4s ease;
+    }
+    #ffmpeg-progress-bar.indeterminate {
+      width: 100%;
+      animation: ffmpeg-indeterminate 1.2s ease-in-out infinite;
+    }
+    #ffmpeg-progress-bar.error {
+      background: #ef4444;
+    }
+    #ffmpeg-text {
+      font-size: 11px;
+      color: #9ca3af;
+      white-space: nowrap;
+    }
+    #bottom-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #020617;
+      border-top: 1px solid #1f2937;
+      padding: 6px 12px;
+      font-size: 11px;
+      color: #9ca3af;
+      display: flex;
+      justify-content: center;
+      z-index: 50;
+    }
+    #bottom-bar code {
+      font-size: 11px;
+      color: #e5e7eb;
+    }
+    .cam-url i {
+      margin-right: 4px;
+    }
+    .device-pill i {
+      margin-right: 6px;
+      font-size: 12px;
+    }
+    @keyframes ffmpeg-indeterminate {
+      0% { transform: translateX(-100%); }
+      50% { transform: translateX(-40%); }
+      100% { transform: translateX(0); }
+    }
+
+    /* Кастомные поля ввода */
+    form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: flex-end;
+      margin: 12px 0;
+      padding: 8px;
+      border: 1px solid #1f2937;
+      border-radius: 4px;
+      background: #020617;
+    }
+    label { display: flex; flex-direction: column; font-size: 12px; gap: 2px; }
+    input, select, button {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      border-radius: 4px;
+      border: 1px solid #4b5563;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 13px;
+    }
+    input, select {
+      min-width: 160px;
+      padding: 6px 8px;
+    }
+    input::placeholder {
+      color: #6b7280;
+    }
+    select {
+      padding-right: 22px;
+      background-image:
+        linear-gradient(45deg, #38bdf8 50%, transparent 50%),
+        linear-gradient(135deg, #38bdf8 50%, transparent 50%);
+      background-position:
+        calc(100% - 12px) 50%,
+        calc(100% - 7px) 50%;
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+    }
+    button {
+      padding: 6px 12px;
+      cursor: pointer;
+      background: #0b1120;
+      border-color: #38bdf8;
+    }
+    button:hover { background: #1f2937; }
+
+    #cameras-counter { font-size: 13px; margin: 8px 0; }
+    #cameras-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 8px;
+    }
+    .cam {
+      border: 1px solid #1f2937;
+      border-radius: 4px;
+      padding: 6px;
+      font-size: 12px;
+      background: #020617;
+    }
+    .cam-header { display: flex; justify-content: space-between; gap: 4px; margin-bottom: 4px; }
+    .cam-header div { max-width: 70%; }
+    .cam-name { font-weight: 600; font-size: 13px; }
+    .cam-url { color: #9ca3af; word-break: break-all; }
+    .cam-type { font-size: 11px; color: #9ca3af; }
+    .cam img,
+    .cam video,
+    .cam canvas {
+      width: 100%;
+      max-height: 220px;
+      background: #000;
+      display: block;
+    }
+    .cam video { border-radius: 3px; }
+    .cam img { border-radius: 3px; }
+    .cam canvas { display: none; }
+    .cam-controls { margin: 4px 0; display: flex; flex-wrap: wrap; gap: 4px; }
+    .cam-controls button { font-size: 11px; padding: 4px 8px; }
+    .cam-status { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+    .cam-download { display: none; font-size: 11px; margin-top: 2px; }
+
+    /* Локальные устройства */
+    #devices-panel {
+      margin: 12px 0;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      font-size: 12px;
+    }
+    #devices-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    #devices-header strong { font-size: 13px; }
+    #devices-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .device-column {
+      flex: 1 1 220px;
+    }
+    .device-column-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #9ca3af;
+      margin-bottom: 2px;
+    }
+    .device-pill {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 8px;
+      margin-bottom: 3px;
+      border-radius: 999px;
+      border: 1px solid #4b5563;
+      cursor: pointer;
+      background: #020617;
+    }
+    .device-pill span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 80%;
+    }
+    .device-pill small {
+      font-size: 10px;
+      color: #9ca3af;
+    }
+    .device-pill:hover {
+      border-color: #38bdf8;
+      background: #0b1120;
+    }
+
+    /* Индикаторы */
+    .spinner {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid #4b5563;
+      border-top-color: #38bdf8;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+      margin-right: 4px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .badge-ok {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #022c22;
+      color: #6ee7b7;
+      font-size: 10px;
+      margin-right: 4px;
+    }
+    .badge-warn {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #451a03;
+      color: #fed7aa;
+      font-size: 10px;
+      margin-right: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div id="header-row">
+        <h1>Хаб камер</h1>
+        <div id="ffmpeg-indicator" title="Готовность ffmpeg.wasm">
+          <div id="ffmpeg-led" class="led"></div>
+          <div id="ffmpeg-progress">
+            <div id="ffmpeg-progress-bar"></div>
+          </div>
+          <div id="ffmpeg-text">Не инициализировано · 0%</div>
+        </div>
+      </div>
+    </header>
+
+    <section id="devices-panel">
+      <div id="devices-header">
+        <strong>Локальные устройства</strong>
+        <small id="devices-status"></small>
+      </div>
+      <div id="devices-list">
+        <div class="device-column">
+          <div class="device-column-title">Камеры</div>
+          <div id="video-devices"></div>
+        </div>
+        <div class="device-column">
+          <div class="device-column-title">Микрофоны</div>
+          <div id="audio-devices"></div>
+        </div>
+      </div>
+      <small>
+        Нажмите на камеру в списке, чтобы создать для неё отдельный локальный поток (можно несколько одновременно).
+      </small>
+    </section>
+
+    <section>
+      <form id="camera-form">
+        <label>
+          Название
+          <input id="camera-label" name="label" placeholder="Например: Офис · вход" />
+        </label>
+        <label>
+          Тип
+          <select id="camera-type" name="type">
+            <option value="local">Локальная камера (устройство)</option>
+            <option value="ip-video">Удалённая камера · видео (MP4 / HLS)</option>
+            <option value="ip-mjpeg">Удалённая камера · MJPEG (/video)</option>
+          </select>
+        </label>
+        <label>
+          URL (для IP‑камер)
+          <input id="camera-url" name="url" placeholder="http://host:port/path" />
+        </label>
+        <button type="submit">Добавить камеру</button>
+      </form>
+    </section>
+
+    <section>
+      <div id="cameras-counter">Нет активных камер</div>
+      <div id="cameras-grid"></div>
+    </section>
+  </div>
+
+  <div id="bottom-bar">
+    Важно: RTSP напрямую в браузере не работает. Для удалённых камер нужен HTTP(S) поток, который может декодировать сам браузер. Для MJPEG‑потоков (например, <code>/video</code> у Android IP Webcam) используйте тип «Удалённая камера · MJPEG».
+  </div>
+
+  <!-- ffmpeg.wasm UMD с cdnjs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.15/umd/ffmpeg.min.js"></script>
+
+  <script>
+    // ==========================
+    //   ГЛОБАЛЬНОЕ СОСТОЯНИЕ
+    // ==========================
+    const cameras = new Map();
+    let cameraIdCounter = 1;
+
+    const gridEl = document.getElementById('cameras-grid');
+    const counterEl = document.getElementById('cameras-counter');
+    const ffmpegLedEl = document.getElementById('ffmpeg-led');
+    const ffmpegProgressBarEl = document.getElementById('ffmpeg-progress-bar');
+    const ffmpegTextEl = document.getElementById('ffmpeg-text');
+    const formEl = document.getElementById('camera-form');
+
+    const devicesStatusEl = document.getElementById('devices-status');
+    const videoDevicesEl = document.getElementById('video-devices');
+    const audioDevicesEl = document.getElementById('audio-devices');
+
+    function setFFmpegStatus(state, percentOverride) {
+      if (!ffmpegLedEl || !ffmpegProgressBarEl) return;
+      ffmpegProgressBarEl.classList.remove('indeterminate', 'error');
+      ffmpegProgressBarEl.style.transform = 'translateX(0)';
+
+      let label = 'Не инициализировано';
+      let pct = typeof percentOverride === 'number' ? percentOverride : 0;
+
+      switch (state) {
+        case 'loading':
+          label = 'Инициализируется';
+          if (!pct) pct = 50;
+          ffmpegLedEl.className = 'led led-loading';
+          ffmpegProgressBarEl.classList.add('indeterminate');
+          ffmpegProgressBarEl.style.width = '100%';
+          break;
+        case 'ok':
+          label = 'Инициализировано';
+          if (!pct) pct = 100;
+          ffmpegLedEl.className = 'led led-ok';
+          ffmpegProgressBarEl.style.width = pct + '%';
+          break;
+        case 'error':
+          label = 'Ошибка';
+          if (!pct) pct = 100;
+          ffmpegLedEl.className = 'led led-error';
+          ffmpegProgressBarEl.classList.add('error');
+          ffmpegProgressBarEl.style.width = pct + '%';
+          break;
+        default:
+          label = 'Не инициализировано';
+          if (!pct) pct = 0;
+          ffmpegLedEl.className = 'led';
+          ffmpegProgressBarEl.style.width = pct + '%';
+      }
+
+      if (ffmpegTextEl) {
+        ffmpegTextEl.textContent = `${label} · ${pct}%`;
+      }
+    }
+
+    // ==========================
+    //   FFmpeg: лениво и безопасно
+    // ==========================
+    let ffmpeg = null;
+    let ffmpegLoaded = false;
+    let ffmpegLoading = false;
+
+    function hasFFmpegGlobal() {
+      return typeof window !== 'undefined' && window.FFmpeg && typeof window.FFmpeg.createFFmpeg === 'function';
+    }
+
+    function initFFmpegInstance() {
+      if (ffmpeg || !hasFFmpegGlobal()) return;
+      const { createFFmpeg } = window.FFmpeg;
+      ffmpeg = createFFmpeg({
+        log: true,
+        corePath: 'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg-core/0.12.10/umd/ffmpeg-core.js',
+      });
+    }
+
+    async function ensureFFmpegLoaded() {
+      if (!hasFFmpegGlobal()) {
+        setFFmpegStatus('error');
+        throw new Error('FFmpeg global not available');
+      }
+      if (!ffmpeg) initFFmpegInstance();
+      if (ffmpegLoaded) return;
+      if (ffmpegLoading) {
+        await new Promise((resolve) => {
+          const check = () => {
+            if (ffmpegLoaded) return resolve();
+            setTimeout(check, 200);
+          };
+          check();
+        });
+        return;
+      }
+      try {
+        ffmpegLoading = true;
+        setFFmpegStatus('loading');
+        await ffmpeg.load();
+        ffmpegLoaded = true;
+        setFFmpegStatus('ok');
+      } catch (e) {
+        console.error('FFmpeg load error', e);
+        setFFmpegStatus('error');
+        throw e;
+      } finally {
+        ffmpegLoading = false;
+      }
+    }
+
+    // ==========================
+    //   КАМЕРЫ: создание / удаление
+    // ==========================
+    function updateCounter() {
+      const n = cameras.size;
+      counterEl.textContent = n ? `Активные камеры: ${n}` : 'Нет активных камер';
+    }
+
+    function createCamera(label, type, url, meta) {
+      const id = cameraIdCounter++;
+      const name = (label && label.trim()) || `Камера #${id}`;
+
+      const rawType = type || 'local';
+      const cleanedUrl = (url || '').trim();
+      let normalizedType = rawType;
+
+      if (rawType !== 'local' && cleanedUrl) {
+        const lower = cleanedUrl.toLowerCase();
+        const looksLikeMjpeg = lower.endsWith('/video') || lower.includes('mjpeg');
+        const looksLikeFile = /\.(mp4|webm|m3u8)(\?|$)/.test(lower);
+        if (looksLikeMjpeg && !looksLikeFile) {
+          normalizedType = 'ip-mjpeg';
+        }
+      }
+
+      const cam = {
+        id,
+        name,
+        type: normalizedType,
+        url: cleanedUrl,
+        meta: meta || {},
+        stream: null,
+        recording: false,
+        root: null,
+        video: null,
+        img: null,
+        canvas: null,
+        statusEl: null,
+        downloadEl: null,
+      };
+
+      console.log('[createCamera]', cam);
+
+      const card = buildCameraCard(cam);
+      cam.root = card;
+      cam.video = card.querySelector('video');
+      cam.img = card.querySelector('img');
+      cam.canvas = card.querySelector('canvas');
+      cam.statusEl = card.querySelector('.cam-status');
+      cam.downloadEl = card.querySelector('.cam-download');
+      cameras.set(id, cam);
+      gridEl.appendChild(card);
+      updateCounter();
+
+      if (cam.type === 'local') initLocalCamera(cam);
+      else initIpCamera(cam);
+    }
+
+    function buildCameraCard(cam) {
+      const card = document.createElement('article');
+      card.className = 'cam';
+      card.dataset.id = String(cam.id);
+
+      const header = document.createElement('div');
+      header.className = 'cam-header';
+      const left = document.createElement('div');
+      const nameEl = document.createElement('div');
+      nameEl.className = 'cam-name';
+      nameEl.textContent = cam.name;
+      const urlEl = document.createElement('div');
+      urlEl.className = 'cam-url';
+      if (cam.url) {
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-network-wired';
+        const spanUrl = document.createElement('span');
+        spanUrl.textContent = ' ' + cam.url;
+        urlEl.appendChild(icon);
+        urlEl.appendChild(spanUrl);
+      } else {
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-video';
+        const spanUrl = document.createElement('span');
+        spanUrl.textContent = ' локальное устройство';
+        urlEl.appendChild(icon);
+        urlEl.appendChild(spanUrl);
+      }
+      left.appendChild(nameEl);
+      left.appendChild(urlEl);
+
+      const right = document.createElement('div');
+      right.style.textAlign = 'right';
+      const typeEl = document.createElement('div');
+      typeEl.className = 'cam-type';
+      let typeHtml;
+      if (cam.type === 'local') {
+        typeHtml = '<i class="fa-solid fa-video"></i> локальная';
+      } else if (cam.type === 'ip-mjpeg') {
+        typeHtml = '<i class="fa-solid fa-network-wired"></i> MJPEG';
+      } else {
+        typeHtml = '<i class="fa-solid fa-network-wired"></i> видео';
+      }
+      typeEl.innerHTML = typeHtml;
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.textContent = 'Удалить';
+      removeBtn.style.fontSize = '11px';
+      removeBtn.addEventListener('click', () => removeCamera(cam.id));
+      right.appendChild(typeEl);
+      right.appendChild(removeBtn);
+
+      header.appendChild(left);
+      header.appendChild(right);
+
+      let mediaEl;
+      if (cam.type === 'ip-mjpeg') {
+        mediaEl = document.createElement('img');
+        mediaEl.alt = cam.name;
+      } else {
+        mediaEl = document.createElement('video');
+        mediaEl.autoplay = true;
+        mediaEl.playsInline = true;
+        mediaEl.muted = true;
+        mediaEl.controls = true; // кастомный вид задаётся стилями
+      }
+
+      const canvas = document.createElement('canvas');
+
+      const controls = document.createElement('div');
+      controls.className = 'cam-controls';
+
+      const btnStart = document.createElement('button');
+      btnStart.type = 'button';
+      btnStart.textContent = 'Старт/переподключить';
+      btnStart.addEventListener('click', () => {
+        if (cam.type === 'local') initLocalCamera(cam, { force: true });
+        else initIpCamera(cam, { force: true });
+      });
+
+      const btnStop = document.createElement('button');
+      btnStop.type = 'button';
+      btnStop.textContent = 'Стоп поток';
+      btnStop.addEventListener('click', () => {
+        stopStream(cam);
+        setCamStatus(cam, 'Поток остановлен пользователем.');
+      });
+
+      const btnSnap = document.createElement('button');
+      btnSnap.type = 'button';
+      btnSnap.textContent = 'Снимок';
+      btnSnap.addEventListener('click', () => makeSnapshot(cam));
+
+      const btnRec = document.createElement('button');
+      btnRec.type = 'button';
+      btnRec.textContent = '10 сек → MP4';
+      btnRec.addEventListener('click', () => recordSegment(cam, 10).catch(console.error));
+
+      controls.appendChild(btnStart);
+      controls.appendChild(btnStop);
+      controls.appendChild(btnSnap);
+      controls.appendChild(btnRec);
+
+      const status = document.createElement('div');
+      status.className = 'cam-status';
+      status.textContent = 'Идёт инициализация…';
+
+      const download = document.createElement('a');
+      download.className = 'cam-download';
+      download.target = '_blank';
+      download.rel = 'noopener noreferrer';
+      download.textContent = 'Скачать последний MP4';
+
+      card.appendChild(header);
+      card.appendChild(mediaEl);
+      card.appendChild(canvas);
+      card.appendChild(controls);
+      card.appendChild(status);
+      card.appendChild(download);
+
+      return card;
+    }
+
+    function removeCamera(id) {
+      const cam = cameras.get(id);
+      if (!cam) return;
+      stopStream(cam);
+      if (cam.root && cam.root.parentNode) cam.root.parentNode.removeChild(cam.root);
+      cameras.delete(id);
+      updateCounter();
+    }
+
+    function stopStream(cam) {
+      if (cam.stream) {
+        cam.stream.getTracks().forEach((t) => t.stop());
+        cam.stream = null;
+      }
+      if (cam.video) {
+        try {
+          cam.video.pause();
+          cam.video.srcObject = null;
+          cam.video.removeAttribute('src');
+        } catch (e) {}
+      }
+      if (cam.img) {
+        cam.img.src = '';
+      }
+    }
+
+    function setCamStatus(cam, text) {
+      if (cam.statusEl) cam.statusEl.textContent = text;
+    }
+
+    // ==========================
+    //   ЛОКАЛЬНЫЕ УСТРОЙСТВА
+    // ==========================
+    async function refreshDevices() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        if (devicesStatusEl) devicesStatusEl.innerHTML = '<span class="badge-warn">ERR</span>MediaDevices не поддерживается браузером.';
+        return;
+      }
+      try {
+        if (devicesStatusEl) devicesStatusEl.innerHTML = '<span class="spinner"></span>поиск устройств…';
+        const list = await navigator.mediaDevices.enumerateDevices();
+        const videos = list.filter((d) => d.kind === 'videoinput');
+        const audios = list.filter((d) => d.kind === 'audioinput');
+        renderDevices(videos, audios);
+        if (devicesStatusEl) {
+          devicesStatusEl.innerHTML = `<span class="badge-ok">OK</span>камер: ${videos.length}, микрофонов: ${audios.length}`;
+        }
+      } catch (e) {
+        console.error('enumerateDevices error', e);
+        if (devicesStatusEl) devicesStatusEl.innerHTML = '<span class="badge-warn">ERR</span>нет доступа к устройствам (нужны права).';
+      }
+    }
+
+    function renderDevices(videos, audios) {
+      if (videoDevicesEl) videoDevicesEl.innerHTML = '';
+      if (audioDevicesEl) audioDevicesEl.innerHTML = '';
+
+      videos.forEach((d, idx) => {
+        const pill = document.createElement('div');
+        pill.className = 'device-pill';
+        const name = d.label || `Камера ${idx + 1}`;
+        const leftWrap = document.createElement('div');
+        leftWrap.style.display = 'flex';
+        leftWrap.style.alignItems = 'center';
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-video';
+        const span = document.createElement('span');
+        span.textContent = name;
+        leftWrap.appendChild(icon);
+        leftWrap.appendChild(span);
+        const meta = document.createElement('small');
+        meta.textContent = d.deviceId ? 'подключить' : 'нет ID';
+        pill.appendChild(leftWrap);
+        pill.appendChild(meta);
+        if (d.deviceId) {
+          pill.addEventListener('click', () => {
+            createCamera(name, 'local', '', { videoDeviceId: d.deviceId });
+          });
+        }
+        videoDevicesEl.appendChild(pill);
+      });
+
+      audios.forEach((d, idx) => {
+        const pill = document.createElement('div');
+        pill.className = 'device-pill';
+        const name = d.label || `Микрофон ${idx + 1}`;
+        const leftWrap = document.createElement('div');
+        leftWrap.style.display = 'flex';
+        leftWrap.style.alignItems = 'center';
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-microphone';
+        const span = document.createElement('span');
+        span.textContent = name;
+        leftWrap.appendChild(icon);
+        leftWrap.appendChild(span);
+        const meta = document.createElement('small');
+        meta.textContent = d.deviceId ? 'input' : 'нет ID';
+        pill.appendChild(leftWrap);
+        pill.appendChild(meta);
+        audioDevicesEl.appendChild(pill);
+      });
+    }
+
+    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+      refreshDevices();
+      setInterval(refreshDevices, 10000); // периодический опрос без вмешательства в потоки
+    }
+
+    // ==========================
+    //   ИНИЦИАЛИЗАЦИЯ КАМЕР
+    // ==========================
+    async function initLocalCamera(cam, opts = {}) {
+      const force = !!opts.force;
+      try {
+        if (cam.stream && !force) {
+          cam.video.srcObject = cam.stream;
+          await cam.video.play();
+          setCamStatus(cam, 'Локальная камера уже активна.');
+          return;
+        }
+        if (force) stopStream(cam);
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setCamStatus(cam, 'getUserMedia не поддерживается браузером.');
+          return;
+        }
+        setCamStatus(cam, 'Запрос доступа к локальной камере…');
+        const videoConstraints = cam.meta && cam.meta.videoDeviceId
+          ? { deviceId: { exact: cam.meta.videoDeviceId } }
+          : true;
+        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+        cam.stream = stream;
+        cam.video.srcObject = stream;
+        await cam.video.play();
+        setCamStatus(cam, 'Локальная web‑камера активна.');
+      } catch (e) {
+        console.error('Local cam error', e);
+        setCamStatus(cam, 'Ошибка доступа к локальной камере (права/HTTPS/настройки).');
+      }
+    }
+
+    async function initIpCamera(cam, opts = {}) {
+      const force = !!opts.force;
+      if (!cam.url) {
+        setCamStatus(cam, 'Для IP‑камеры нужен URL потока.');
+        return;
+      }
+      try {
+        if (force) stopStream(cam);
+        setCamStatus(cam, `Подключение к IP‑камере (тип: ${cam.type})…`);
+
+        if (cam.type === 'ip-mjpeg') {
+          if (!cam.img) {
+            setCamStatus(cam, 'Ошибка: для MJPEG камеры не найден <img>.');
+            return;
+          }
+          cam.img.src = cam.url;
+          setCamStatus(cam, 'MJPEG: поток запущен (если формат поддерживается браузером).');
+        } else {
+          if (!cam.video) {
+            setCamStatus(cam, 'Ошибка: для видео-камеры не найден <video>.');
+            return;
+          }
+          cam.video.srcObject = null;
+          cam.video.src = cam.url;
+          cam.video.crossOrigin = 'anonymous';
+          try {
+            await cam.video.play();
+            setCamStatus(cam, 'IP‑камера: поток запущен (если формат поддерживается браузером).');
+          } catch (e) {
+            console.warn('Autoplay blocked for IP cam', e);
+            setCamStatus(cam, 'IP‑камера: нажмите Play на видео (autoplay заблокирован).');
+          }
+        }
+      } catch (e) {
+        console.error('IP cam error', e);
+        setCamStatus(cam, 'Ошибка подключения к IP‑камере (CORS/формат/доступ).');
+      }
+    }
+
+    // ==========================
+    //   СНИМОК (CANVAS)
+    // ==========================
+    function makeSnapshot(cam) {
+      if (!cam.canvas) return;
+      const c = cam.canvas;
+      let w, h;
+
+      if (cam.type === 'ip-mjpeg' && cam.img) {
+        const img = cam.img;
+        if (!img.complete || img.naturalWidth === 0) {
+          setCamStatus(cam, 'MJPEG: кадр ещё не загружен для снимка.');
+          return;
+        }
+        w = img.naturalWidth;
+        h = img.naturalHeight;
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext('2d');
+        try {
+          ctx.drawImage(img, 0, 0, w, h);
+          c.style.display = 'block';
+          setCamStatus(cam, 'Снимок сделан (canvas) из MJPEG.');
+        } catch (e) {
+          console.error('Snapshot MJPEG error', e);
+          setCamStatus(cam, 'Не удалось сделать снимок (ограничения CORS).');
+        }
+        return;
+      }
+
+      if (cam.video) {
+        const v = cam.video;
+        if (v.readyState < 2) {
+          setCamStatus(cam, 'Видео ещё не готово для снимка.');
+          return;
+        }
+        w = v.videoWidth || 640;
+        h = v.videoHeight || 360;
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(v, 0, 0, w, h);
+        c.style.display = 'block';
+        setCamStatus(cam, 'Снимок сделан (canvas).');
+      }
+    }
+
+    // ==========================
+    //   ЗАПИСЬ 10 СЕК В MP4 ЧЕРЕЗ FFmpeg
+    // ==========================
+    async function recordSegment(cam, seconds) {
+      if (cam.recording) {
+        setCamStatus(cam, 'Уже идёт запись для этой камеры.');
+        return;
+      }
+
+      if (cam.type === 'ip-mjpeg') {
+        setCamStatus(cam, 'Запись MP4 для MJPEG‑потока в этом демо не реализована.');
+        return;
+      }
+
+      if (!cam.video) {
+        setCamStatus(cam, 'Нет video элемента для записи.');
+        return;
+      }
+
+      let stream = cam.stream;
+      if (!stream) {
+        if (typeof cam.video.captureStream === 'function') {
+          stream = cam.video.captureStream();
+          cam.stream = stream;
+        } else {
+          setCamStatus(cam, 'captureStream() не поддерживается для этого видео.');
+          return;
+        }
+      }
+      if (!stream) {
+        setCamStatus(cam, 'Не удалось получить поток для записи.');
+        return;
+      }
+
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream, {});
+      } catch (e) {
+        console.error('MediaRecorder error', e);
+        setCamStatus(cam, 'MediaRecorder не поддерживается или не может писать этот поток.');
+        return;
+      }
+
+      const chunks = [];
+      const recPromise = new Promise((resolve, reject) => {
+        recorder.ondataavailable = (ev) => {
+          if (ev.data && ev.data.size > 0) chunks.push(ev.data);
+        };
+        recorder.onerror = (ev) => reject(ev.error || new Error('MediaRecorder error'));
+        recorder.onstop = () => resolve();
+      });
+
+      recorder.start();
+      cam.recording = true;
+      setCamStatus(cam, `MediaRecorder: запись ${seconds} с…`);
+
+      setTimeout(() => {
+        if (recorder.state === 'recording') recorder.stop();
+      }, seconds * 1000);
+
+      try {
+        await recPromise;
+      } catch (e) {
+        console.error('Recording error', e);
+        setCamStatus(cam, 'Ошибка во время записи MediaRecorder, см. консоль.');
+        cam.recording = false;
+        return;
+      }
+
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      setCamStatus(cam, 'MediaRecorder: запись завершена, запуск FFmpeg…');
+
+      await ensureFFmpegLoaded();
+
+      const inputName = `input_${cam.id}.webm`;
+      const outputName = `output_${cam.id}.mp4`;
+
+      try {
+        const ab = await blob.arrayBuffer();
+        ffmpeg.FS('writeFile', inputName, new Uint8Array(ab));
+        setFFmpegStatus('loading');
+
+        await ffmpeg.run(
+          '-i', inputName,
+          '-c:v', 'libx264',
+          '-preset', 'veryfast',
+          '-crf', '28',
+          '-an',
+          outputName
+        );
+
+        const data = ffmpeg.FS('readFile', outputName);
+        const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
+        const url = URL.createObjectURL(mp4Blob);
+
+        if (cam.downloadEl) {
+          cam.downloadEl.href = url;
+          cam.downloadEl.download = `${sanitizeFileName(cam.name)}_${Date.now()}.mp4`;
+          cam.downloadEl.style.display = 'inline-block';
+        }
+        setCamStatus(cam, 'Готов MP4‑файл, можно скачать.');
+        setFFmpegStatus('ok');
+      } catch (e) {
+        console.error('FFmpeg convert error', e);
+        setCamStatus(cam, 'Ошибка FFmpeg при конвертации, см. консоль.');
+        setFFmpegStatus('error');
+      } finally {
+        cam.recording = false;
+        try { ffmpeg.FS('unlink', inputName); } catch (e) {}
+        try { ffmpeg.FS('unlink', outputName); } catch (e) {}
+      }
+    }
+
+    function sanitizeFileName(name) {
+      return (name || 'camera').replace(/[^a-zA-Z0-9_\-]+/g, '_').slice(0, 40) || 'camera';
+    }
+
+    // ==========================
+    //   ОБРАБОТКА ФОРМЫ
+    // ==========================
+    formEl.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const label = document.getElementById('camera-label').value;
+      const type = document.getElementById('camera-type').value || 'local';
+      const url = document.getElementById('camera-url').value;
+      if (type !== 'local' && (!url || !url.trim())) {
+        alert('Для IP‑камеры требуется URL потока.');
+        return;
+      }
+      createCamera(label, type, url || '');
+      document.getElementById('camera-label').value = '';
+      document.getElementById('camera-url').value = '';
+    });
+  </script>
+</body>
+</html>

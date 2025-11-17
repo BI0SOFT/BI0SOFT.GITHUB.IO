@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -404,7 +405,7 @@
             cursor: not-allowed;
         }
 
-        /* Стили для списка устройств */
+        /* Стили для списка устройств - ИСПРАВЛЕНЫ */
         .devices-section {
             margin-top: 25px;
             padding-top: 20px;
@@ -447,6 +448,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            min-height: 50px;
         }
 
         .device-item:last-child {
@@ -457,23 +459,33 @@
             width: 20px;
             text-align: center;
             color: var(--primary);
+            flex-shrink: 0;
         }
 
         .device-info {
             flex: 1;
+            min-width: 0; /* Важно для работы text-overflow */
+            overflow: hidden;
         }
 
         .device-name {
             font-weight: 500;
             color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 2px;
         }
 
         .device-id {
             font-size: 0.75rem;
             color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        /* Стили для TensorFlow результатов */
+        /* Стили для TensorFlow результатов - ИСПРАВЛЕНЫ */
         .tensorflow-results {
             margin-top: 10px;
             padding: 10px;
@@ -484,10 +496,19 @@
 
         .tensorflow-status {
             display: flex;
-            align-items: center;
+            align-items: center; /* Выравнивание по центру по вертикали */
             gap: 8px;
             margin-bottom: 8px;
             color: var(--text-muted);
+        }
+
+        /* Исправляем выравнивание иконки */
+        .tensorflow-status i {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 16px;
+            width: 16px;
         }
 
         .disease-detection {

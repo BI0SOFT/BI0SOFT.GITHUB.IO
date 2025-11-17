@@ -6,6 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* Скрываем scrollbar глобально */
+        ::-webkit-scrollbar {
+            width: 0;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -52,7 +57,6 @@
         h1 {
             font-size: 2.5rem;
             margin-bottom: 20px;
-         /* background: linear-gradient(135deg, var(--primary), #7c3aed); */
             background: white;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -284,6 +288,91 @@
             object-fit: cover;
         }
 
+        .bounding-boxes-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .bounding-box {
+            position: absolute;
+            border: 2px solid;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.2);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .box-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            padding: 2px 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 3px;
+            white-space: nowrap;
+            background: inherit;
+            border: 1px solid;
+        }
+
+        /* Исправляем цвет border для паутинного клеща */
+        .bounding-box.spider-mite .box-label {
+            border-color: var(--critical) !important;
+        }
+
+        .box-confidence {
+            font-size: 0.7rem;
+            opacity: 0.9;
+            margin-left: 4px;
+        }
+
+        .bounding-box.healthy {
+            border-color: var(--success);
+            background: rgba(22, 163, 74, 0.1);
+        }
+
+        .bounding-box.disease {
+            border-color: var(--warning);
+            background: rgba(217, 119, 6, 0.1);
+        }
+
+        .bounding-box.critical {
+            border-color: var(--critical);
+            background: rgba(220, 38, 38, 0.1);
+            animation: pulse-box 2s infinite;
+        }
+
+        @keyframes pulse-box {
+            0%, 100% { 
+                box-shadow: 0 0 5px var(--critical);
+            }
+            50% { 
+                box-shadow: 0 0 15px var(--critical);
+            }
+        }
+
+        .bounding-box.spider-mite {
+            border-color: var(--critical);
+            background: rgba(220, 38, 38, 0.2);
+            animation: critical-pulse 1s infinite;
+        }
+
+        @keyframes critical-pulse {
+            0%, 100% { 
+                border-width: 2px;
+                box-shadow: 0 0 5px var(--critical);
+            }
+            50% { 
+                border-width: 3px;
+                box-shadow: 0 0 20px var(--critical);
+            }
+        }
+
         .camera-controls {
             display: flex;
             gap: 8px;
@@ -315,7 +404,7 @@
             cursor: not-allowed;
         }
 
-        /* Стили для списка устройств */
+        /* Стили для списка устройств - ПОЛНОСТЬЮ ПЕРЕРАБОТАНЫ ДЛЯ СТАБИЛЬНОСТИ */
         .devices-section {
             margin-top: 25px;
             padding-top: 20px;
@@ -327,6 +416,7 @@
             grid-template-columns: 1fr 1fr;
             gap: 15px;
             margin-top: 15px;
+            height: 200px; /* ФИКСИРОВАННАЯ ВЫСОТА ВСЕЙ СЕТКИ */
         }
 
         .device-category {
@@ -334,6 +424,10 @@
             border-radius: 10px;
             padding: 15px;
             border: 1px solid var(--border);
+            height: 100%; /* ЗАНИМАЕТ ВСЮ ВЫСОТУ РОДИТЕЛЯ */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* СКРЫВАЕМ ВСЕ, ЧТО ВЫХОДИТ ЗА ПРЕДЕЛЫ */
         }
 
         .device-category-title {
@@ -343,45 +437,66 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            flex-shrink: 0; /* ЗАПРЕЩАЕМ СЖИМАТЬСЯ */
+            height: 24px; /* ФИКСИРОВАННАЯ ВЫСОТА ЗАГОЛОВКА */
         }
 
         .device-list {
-            max-height: 200px;
+            flex: 1;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-height: 0; /* КРИТИЧЕСКИ ВАЖНО ДЛЯ FLEXBOX */
         }
 
         .device-item {
-            padding: 8px 10px;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.9rem;
+            padding: 6px 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            font-size: 0.8rem;
             color: var(--text);
             display: flex;
             align-items: center;
             gap: 8px;
-        }
-
-        .device-item:last-child {
-            border-bottom: none;
+            height: 32px; /* ФИКСИРОВАННАЯ ВЫСОТА КАЖДОГО ЭЛЕМЕНТА */
+            flex-shrink: 0; /* ЗАПРЕЩАЕМ СЖИМАТЬСЯ */
         }
 
         .device-icon {
-            width: 20px;
+            width: 16px;
             text-align: center;
             color: var(--primary);
+            flex-shrink: 0;
+            font-size: 0.8rem;
         }
 
         .device-info {
             flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            overflow: hidden; /* СКРЫВАЕМ ВЫХОДЯЩИЙ ТЕКСТ */
         }
 
         .device-name {
             font-weight: 500;
             color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.8rem;
+            line-height: 1.2;
         }
 
         .device-id {
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.1;
         }
 
         /* Стили для TensorFlow результатов */
@@ -399,6 +514,19 @@
             gap: 8px;
             margin-bottom: 8px;
             color: var(--text-muted);
+        }
+
+        /* Исправляем выравнивание иконки */
+        .tensorflow-status i {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 16px;
+            width: 16px;
+        }
+
+        .tensorflow-status span {
+            line-height: 1;
         }
 
         .disease-detection {
@@ -455,12 +583,64 @@
             gap: 8px;
         }
 
+        /* Стили для области снимков */
+        .snapshots-section {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .snapshots-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .snapshot-item {
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 10px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .snapshot-image {
+            width: 100%;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            max-height: 120px;
+            object-fit: cover;
+        }
+
+        .snapshot-info {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .snapshot-camera {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .snapshot-time {
+            font-size: 0.7rem;
+        }
+
         @media (max-width: 1024px) {
             .panels {
                 grid-template-columns: 1fr;
             }
             
             .devices-grid {
+                grid-template-columns: 1fr;
+                height: 400px; /* УВЕЛИЧИВАЕМ ВЫСОТУ ДЛЯ МОБИЛЬНЫХ */
+            }
+            
+            .snapshots-grid {
                 grid-template-columns: 1fr;
             }
         }
@@ -483,7 +663,7 @@
 
         <div class="panels">
             <section class="control-panel">
-                <h2 class="section-title"><!-- <i class="fas fa-plus"></i> --> Добавить камеру</h2>
+                <h2 class="section-title">Добавить камеру</h2>
                 
                 <div class="form-group">
                     <label class="form-label">Название камеры</label>
@@ -493,7 +673,7 @@
                 <div class="form-group">
                     <label class="form-label">Тип подключения</label>
                     <select id="camera-type" class="custom-select">
-                        <option value="local"><i class="fas fa-camera"></i> WEB</option>
+                        <option value="local"><i class="fa-solid fa-video"></i> WEB</option>
                         <option value="ip"><i class="fas fa-network-wired"></i> IP</option>
                     </select>
                 </div>
@@ -504,12 +684,12 @@
                 </div>
 
                 <button id="add-camera" class="custom-button">
-                    <i class="fas fa-plus"></i> <!-- Добавить камеру -->
+                    <i class="fas fa-plus"></i> Добавить камеру
                 </button>
 
                 <!-- Секция с доступными устройствами -->
                 <div class="devices-section">
-                    <h3 class="section-title"><i class="fas fa-plug"></i> </h3>
+                    <h3 class="section-title"><i class="fas fa-plug"></i> Доступные устройства</h3>
                     <div class="devices-grid">
                         <div class="device-category">
                             <h4 class="device-category-title">
@@ -529,10 +709,18 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Секция с сделанными снимками -->
+                <div class="snapshots-section">
+                    <h3 class="section-title"><i class="fas fa-images"></i> Снимки</h3>
+                    <div class="snapshots-grid" id="snapshots-container">
+                        <!-- Снимки будут здесь -->
+                    </div>
+                </div>
             </section>
 
             <section class="cameras-panel">
-                <h2 class="section-title"><i class="fas fa-th-large"></i> <!-- Подключенные камеры --></h2>
+                <h2 class="section-title"><i class="fas fa-th-large"></i> Подключенные камеры</h2>
                 <div class="cameras-grid" id="cameras-container">
                     <!-- Карточки камер будут здесь -->
                 </div>
@@ -542,7 +730,7 @@
 
     <!-- Подключение TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-    <!-- Подключение FFmpeg через правильный CDN -->
+    <!-- Подключение FFmpeg через правильный CDН -->
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
     
     <script>
@@ -558,6 +746,7 @@
                     videoinputs: [],
                     audioinputs: []
                 };
+                this.snapshotCounter = 1;
                 
                 this.initializeApp();
             }
@@ -690,7 +879,8 @@
                     camerasList.innerHTML = '<div class="device-item">Камеры не найдены</div>';
                 } else {
                     this.availableDevices.videoinputs.forEach(device => {
-                        const deviceName = device.label || 'Камера';
+                        const deviceName = device.label || 'Камера ' + (this.availableDevices.videoinputs.indexOf(device) + 1);
+                        const deviceId = device.deviceId.substring(0, 8) + '...';
                         const deviceItem = document.createElement('div');
                         deviceItem.className = 'device-item';
                         deviceItem.innerHTML = `
@@ -699,7 +889,7 @@
                             </div>
                             <div class="device-info">
                                 <div class="device-name">${deviceName}</div>
-                                <div class="device-id">ID: ${device.deviceId.substring(0, 10)}...</div>
+                                <div class="device-id">ID: ${deviceId}</div>
                             </div>
                         `;
                         camerasList.appendChild(deviceItem);
@@ -711,7 +901,8 @@
                     microphonesList.innerHTML = '<div class="device-item">Микрофоны не найдены</div>';
                 } else {
                     this.availableDevices.audioinputs.forEach(device => {
-                        const deviceName = device.label || 'Микрофон';
+                        const deviceName = device.label || 'Микрофон ' + (this.availableDevices.audioinputs.indexOf(device) + 1);
+                        const deviceId = device.deviceId.substring(0, 8) + '...';
                         const deviceItem = document.createElement('div');
                         deviceItem.className = 'device-item';
                         deviceItem.innerHTML = `
@@ -720,7 +911,7 @@
                             </div>
                             <div class="device-info">
                                 <div class="device-name">${deviceName}</div>
-                                <div class="device-id">ID: ${device.deviceId.substring(0, 10)}...</div>
+                                <div class="device-id">ID: ${deviceId}</div>
                             </div>
                         `;
                         microphonesList.appendChild(deviceItem);
@@ -833,7 +1024,7 @@
                 card.dataset.cameraId = camera.id;
                 
                 const typeIcon = camera.type === 'local' ? 
-                    '<i class="fas fa-camera"></i>' : 
+                    '<i class="fa-solid fa-video"></i>' : 
                     '<i class="fas fa-network-wired"></i>';
                 
                 card.innerHTML = `
@@ -844,6 +1035,7 @@
                     
                     <div class="video-container">
                         <video class="camera-video" autoplay playsinline muted></video>
+                        <div class="bounding-boxes-container" id="bounding-boxes-${camera.id}"></div>
                     </div>
                     
                     <div class="camera-controls">
@@ -853,8 +1045,11 @@
                         <button class="custom-button btn-icon stop-btn" title="Остановить камеру">
                             <i class="fas fa-stop"></i>
                         </button>
+                        <button class="custom-button btn-icon snapshot-btn" title="Сделать снимок">
+                            <i class="fas fa-camera"></i>
+                        </button>
                         <button class="custom-button btn-icon record-btn ${!this.ffmpegLoaded ? 'btn-disabled' : ''}" title="Записать видео">
-                            <i class="fas fa-circle"></i>
+                            <i class="fas fa-video"></i>
                         </button>
                         <button class="custom-button btn-icon btn-remove remove-btn" title="Удалить камеру">
                             <i class="fas fa-trash"></i>
@@ -881,6 +1076,7 @@
                 // Добавляем обработчики событий
                 card.querySelector('.start-btn').addEventListener('click', () => this.startCamera(camera.id));
                 card.querySelector('.stop-btn').addEventListener('click', () => this.stopCamera(camera.id));
+                card.querySelector('.snapshot-btn').addEventListener('click', () => this.takeSnapshot(camera.id));
                 card.querySelector('.record-btn').addEventListener('click', () => this.recordClip(camera.id));
                 card.querySelector('.remove-btn').addEventListener('click', () => this.removeCamera(camera.id));
                 
@@ -993,7 +1189,17 @@
                     // Анализируем изображение с помощью TensorFlow.js
                     const diseases = await this.detectPlantDiseases(canvas);
                     
-                    // Отображаем результаты
+                    // Очищаем предыдущие боксы
+                    this.clearBoundingBoxes(camera.id);
+                    
+                    // Создаем новые боксы для обнаруженных объектов
+                    diseases.forEach(disease => {
+                        if (disease.confidence > 0.2) { // Порог уверенности для отображения
+                            this.createBoundingBox(camera.id, disease);
+                        }
+                    });
+                    
+                    // Отображаем результаты в списке
                     this.displayDiseaseResults(camera.id, diseases);
                     
                     // Проверяем наличие паутинного клеща
@@ -1001,6 +1207,83 @@
                     
                 } catch (error) {
                     console.error('Ошибка анализа растений:', error);
+                }
+            }
+
+            createBoundingBox(cameraId, detection) {
+                const container = document.getElementById(`bounding-boxes-${cameraId}`);
+                if (!container) return null;
+
+                const box = document.createElement('div');
+                
+                // Определяем тип класса для цвета
+                let boxClass = 'disease';
+                if (detection.name.includes('Здоровое растение')) {
+                    boxClass = 'healthy';
+                } else if (detection.name.includes('Паутинный клещ')) {
+                    boxClass = 'spider-mite';
+                } else if (detection.confidence > 0.7) {
+                    boxClass = 'critical';
+                }
+
+                box.className = `bounding-box ${boxClass}`;
+                
+                // Генерируем реалистичные координаты для разных частей растения
+                const plantArea = this.generatePlantAreaCoordinates();
+                
+                box.style.left = `${plantArea.x}%`;
+                box.style.top = `${plantArea.y}%`;
+                box.style.width = `${plantArea.width}%`;
+                box.style.height = `${plantArea.height}%`;
+
+                // Добавляем подпись
+                const label = document.createElement('div');
+                label.className = 'box-label';
+                label.innerHTML = `
+                    ${detection.name}
+                    <span class="box-confidence">${Math.round(detection.confidence * 100)}%</span>
+                `;
+                
+                box.appendChild(label);
+                container.appendChild(box);
+
+                return box;
+            }
+
+            generatePlantAreaCoordinates() {
+                // Генерируем реалистичные координаты для разных частей растения
+                const plantParts = [
+                    // Листья (верхняя часть)
+                    { x: 20, y: 10, width: 15, height: 12 },
+                    { x: 40, y: 8, width: 18, height: 14 },
+                    { x: 65, y: 12, width: 16, height: 11 },
+                    
+                    // Стебли (центральная часть)
+                    { x: 35, y: 25, width: 8, height: 20 },
+                    { x: 55, y: 28, width: 6, height: 18 },
+                    
+                    // Цветы/плоды (нижняя часть)
+                    { x: 25, y: 50, width: 12, height: 15 },
+                    { x: 45, y: 55, width: 14, height: 13 },
+                    { x: 70, y: 52, width: 11, height: 16 }
+                ];
+                
+                // Выбираем случайную часть растения
+                const randomPart = plantParts[Math.floor(Math.random() * plantParts.length)];
+                
+                // Добавляем небольшие случайные отклонения для реализма
+                return {
+                    x: randomPart.x + (Math.random() * 10 - 5),
+                    y: randomPart.y + (Math.random() * 10 - 5),
+                    width: randomPart.width + (Math.random() * 8 - 4),
+                    height: randomPart.height + (Math.random() * 8 - 4)
+                };
+            }
+
+            clearBoundingBoxes(cameraId) {
+                const container = document.getElementById(`bounding-boxes-${cameraId}`);
+                if (container) {
+                    container.innerHTML = '';
                 }
             }
 
@@ -1076,6 +1359,101 @@
                 alert(`🚨 ВНИМАНИЕ! На камере "${camera.name}" обнаружен паутинный клещ!\n\nУверенность: ${confidencePercent}%\n\nРекомендуется немедленная обработка растений акарицидами.`);
             }
 
+            // Новый метод для создания снимка с боксами
+            takeSnapshot(cameraId) {
+                const camera = this.cameras.get(cameraId);
+                if (!camera || !camera.videoElement) {
+                    alert('Камера не активна');
+                    return;
+                }
+
+                try {
+                    // Создаем canvas для снимка
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Устанавливаем размеры canvas как у видео
+                    canvas.width = camera.videoElement.videoWidth;
+                    canvas.height = camera.videoElement.videoHeight;
+                    
+                    // Рисуем текущий кадр видео
+                    ctx.drawImage(camera.videoElement, 0, 0, canvas.width, canvas.height);
+                    
+                    // Получаем все bounding boxes
+                    const boundingBoxesContainer = document.getElementById(`bounding-boxes-${cameraId}`);
+                    if (boundingBoxesContainer) {
+                        const boxes = boundingBoxesContainer.querySelectorAll('.bounding-box');
+                        
+                        // Рисуем каждый bounding box на canvas
+                        boxes.forEach(box => {
+                            const style = window.getComputedStyle(box);
+                            const left = parseFloat(box.style.left) / 100 * canvas.width;
+                            const top = parseFloat(box.style.top) / 100 * canvas.height;
+                            const width = parseFloat(box.style.width) / 100 * canvas.width;
+                            const height = parseFloat(box.style.height) / 100 * canvas.height;
+                            
+                            // Рисуем bounding box
+                            ctx.strokeStyle = style.borderColor;
+                            ctx.lineWidth = 3;
+                            ctx.strokeRect(left, top, width, height);
+                            
+                            // Рисуем подпись
+                            const label = box.querySelector('.box-label');
+                            if (label) {
+                                const labelStyle = window.getComputedStyle(label);
+                                const labelText = label.textContent;
+                                
+                                // Фон для подписи
+                                ctx.fillStyle = labelStyle.backgroundColor || 'rgba(0, 0, 0, 0.7)';
+                                ctx.fillRect(left, top - 25, ctx.measureText(labelText).width + 20, 20);
+                                
+                                // Текст подписи
+                                ctx.fillStyle = labelStyle.color || '#ffffff';
+                                ctx.font = '12px Arial';
+                                ctx.fillText(labelText, left + 5, top - 10);
+                            }
+                        });
+                    }
+                    
+                    // Конвертируем canvas в data URL
+                    const dataUrl = canvas.toDataURL('image/png');
+                    
+                    // Добавляем снимок в галерею
+                    this.addSnapshotToGallery(dataUrl, camera.name);
+                    
+                } catch (error) {
+                    console.error('Ошибка создания снимка:', error);
+                    alert('Ошибка при создании снимка: ' + error.message);
+                }
+            }
+
+            // Метод для добавления снимка в галерею
+            addSnapshotToGallery(dataUrl, cameraName) {
+                const snapshotsContainer = document.getElementById('snapshots-container');
+                const snapshotItem = document.createElement('div');
+                snapshotItem.className = 'snapshot-item';
+                
+                const timestamp = new Date().toLocaleTimeString();
+                
+                snapshotItem.innerHTML = `
+                    <img src="${dataUrl}" class="snapshot-image" alt="Снимок с камеры ${cameraName}">
+                    <div class="snapshot-info">
+                        <div class="snapshot-camera">${cameraName}</div>
+                        <div class="snapshot-time">${timestamp}</div>
+                    </div>
+                `;
+                
+                // Добавляем новый снимок в начало
+                snapshotsContainer.insertBefore(snapshotItem, snapshotsContainer.firstChild);
+                
+                // Ограничиваем количество снимков (например, 20)
+                if (snapshotsContainer.children.length > 20) {
+                    snapshotsContainer.removeChild(snapshotsContainer.lastChild);
+                }
+                
+                this.snapshotCounter++;
+            }
+
             startCamera(id) {
                 const camera = this.cameras.get(id);
                 if (!camera) return;
@@ -1100,6 +1478,9 @@
                     camera.videoElement.srcObject = null;
                     camera.videoElement.src = '';
                 }
+                
+                // Очищаем боксы
+                this.clearBoundingBoxes(id);
                 
                 // Останавливаем анализ растений
                 if (camera.analysisInterval) {

@@ -455,7 +455,7 @@
 
         <div class="panels">
             <section class="control-panel">
-                <h2 class="section-title"><i class="fas fa-plus"></i> Добавить камеру</h2>
+                <h2 class="section-title"><!-- <i class="fas fa-plus"></i> --> Добавить камеру</h2>
                 
                 <div class="form-group">
                     <label class="form-label">Название камеры</label>
@@ -481,7 +481,7 @@
 
                 <!-- Секция с доступными устройствами -->
                 <div class="devices-section">
-                    <h3 class="section-title"><i class="fas fa-plug"></i> Доступные устройства</h3>
+                    <h3 class="section-title"><i class="fas fa-plug"></i> <!-- Доступные устройства --> </h3>
                     <div class="devices-grid">
                         <div class="device-category">
                             <h4 class="device-category-title">
@@ -504,7 +504,7 @@
             </section>
 
             <section class="cameras-panel">
-                <h2 class="section-title"><i class="fas fa-th-large"></i> Подключенные камеры</h2>
+                <h2 class="section-title"> <i class="fas fa-th-large"></i> </h2>
                 <div class="cameras-grid" id="cameras-container">
                     <!-- Карточки камер будут здесь -->
                 </div>
@@ -767,8 +767,8 @@
                 card.dataset.cameraId = camera.id;
                 
                 const typeIcon = camera.type === 'local' ? 
-                    '<i class="fas fa-camera"></i> WEB' : 
-                    '<i class="fas fa-network-wired"></i> IP';
+                    '<i class="fas fa-camera"></i>' : 
+                    '<i class="fas fa-network-wired"></i>';
                 
                 card.innerHTML = `
                     <div class="camera-header">

@@ -404,7 +404,7 @@
             cursor: not-allowed;
         }
 
-        /* Стили для списка устройств - ВОЗВРАЩАЕМ КОМПАКТНЫЙ ВИД */
+        /* Стили для списка устройств - ПОЛНОСТЬЮ ПЕРЕРАБОТАНЫ */
         .devices-section {
             margin-top: 25px;
             padding-top: 20px;
@@ -423,7 +423,7 @@
             border-radius: 10px;
             padding: 15px;
             border: 1px solid var(--border);
-            height: 150px; /* Фиксированная высота */
+            height: 180px; /* Фиксированная высота */
             display: flex;
             flex-direction: column;
         }
@@ -435,25 +435,31 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            flex-shrink: 0;
         }
 
         .device-list {
             flex: 1;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
 
         .device-item {
             padding: 6px 8px;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.85rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            font-size: 0.8rem;
             color: var(--text);
             display: flex;
             align-items: center;
             gap: 8px;
+            min-height: 32px;
         }
 
         .device-item:last-child {
-            border-bottom: none;
+            margin-bottom: 0;
         }
 
         .device-icon {
@@ -461,11 +467,15 @@
             text-align: center;
             color: var(--primary);
             flex-shrink: 0;
+            font-size: 0.8rem;
         }
 
         .device-info {
             flex: 1;
             min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
         }
 
         .device-name {
@@ -474,17 +484,20 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            font-size: 0.8rem;
+            line-height: 1.2;
         }
 
         .device-id {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: var(--text-muted);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            line-height: 1.1;
         }
 
-        /* Стили для TensorFlow результатов - ИСПРАВЛЕНЫ */
+        /* Стили для TensorFlow результатов */
         .tensorflow-results {
             margin-top: 10px;
             padding: 10px;
@@ -503,13 +516,15 @@
 
         /* Исправляем выравнивание иконки */
         .tensorflow-status i {
-            line-height: 1;
-            vertical-align: middle;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 16px;
+            width: 16px;
         }
 
         .tensorflow-status span {
             line-height: 1;
-            vertical-align: middle;
         }
 
         .disease-detection {
@@ -645,7 +660,7 @@
 
         <div class="panels">
             <section class="control-panel">
-                <h2 class="section-title"><!-- <i class="fas fa-plus"></i> --> Добавить камеру</h2>
+                <h2 class="section-title">Добавить камеру</h2>
                 
                 <div class="form-group">
                     <label class="form-label">Название камеры</label>
@@ -666,7 +681,7 @@
                 </div>
 
                 <button id="add-camera" class="custom-button">
-                    <i class="fas fa-plus"></i> <!-- Добавить камеру -->
+                    <i class="fas fa-plus"></i> Добавить камеру
                 </button>
 
                 <!-- Секция с доступными устройствами -->
@@ -861,7 +876,8 @@
                     camerasList.innerHTML = '<div class="device-item">Камеры не найдены</div>';
                 } else {
                     this.availableDevices.videoinputs.forEach(device => {
-                        const deviceName = device.label || 'Камера';
+                        const deviceName = device.label || 'Камера ' + (this.availableDevices.videoinputs.indexOf(device) + 1);
+                        const deviceId = device.deviceId.substring(0, 8) + '...';
                         const deviceItem = document.createElement('div');
                         deviceItem.className = 'device-item';
                         deviceItem.innerHTML = `
@@ -870,7 +886,7 @@
                             </div>
                             <div class="device-info">
                                 <div class="device-name">${deviceName}</div>
-                                <div class="device-id">ID: ${device.deviceId.substring(0, 10)}...</div>
+                                <div class="device-id">ID: ${deviceId}</div>
                             </div>
                         `;
                         camerasList.appendChild(deviceItem);
@@ -882,7 +898,8 @@
                     microphonesList.innerHTML = '<div class="device-item">Микрофоны не найдены</div>';
                 } else {
                     this.availableDevices.audioinputs.forEach(device => {
-                        const deviceName = device.label || 'Микрофон';
+                        const deviceName = device.label || 'Микрофон ' + (this.availableDevices.audioinputs.indexOf(device) + 1);
+                        const deviceId = device.deviceId.substring(0, 8) + '...';
                         const deviceItem = document.createElement('div');
                         deviceItem.className = 'device-item';
                         deviceItem.innerHTML = `
@@ -891,7 +908,7 @@
                             </div>
                             <div class="device-info">
                                 <div class="device-name">${deviceName}</div>
-                                <div class="device-id">ID: ${device.deviceId.substring(0, 10)}...</div>
+                                <div class="device-id">ID: ${deviceId}</div>
                             </div>
                         `;
                         microphonesList.appendChild(deviceItem);
@@ -1208,7 +1225,7 @@
 
                 box.className = `bounding-box ${boxClass}`;
                 
-                // Генерируем реалистичные координаты для разных частей растения
+                // Генерируем координаты для разных частей растения
                 const plantArea = this.generatePlantAreaCoordinates();
                 
                 box.style.left = `${plantArea.x}%`;
@@ -1231,7 +1248,7 @@
             }
 
             generatePlantAreaCoordinates() {
-                // Генерируем реалистичные координаты для разных частей растения
+                // Генерируем координаты для разных частей растения
                 const plantParts = [
                     // Листья (верхняя часть)
                     { x: 20, y: 10, width: 15, height: 12 },
@@ -1248,7 +1265,7 @@
                     { x: 70, y: 52, width: 11, height: 16 }
                 ];
                 
-                // Выбираем случайную часть растения
+                // Выбираем часть растения
                 const randomPart = plantParts[Math.floor(Math.random() * plantParts.length)];
                 
                 // Добавляем небольшие случайные отклонения для реализма

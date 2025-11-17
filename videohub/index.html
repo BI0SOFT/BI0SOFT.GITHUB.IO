@@ -7,17 +7,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Скрываем scrollbar глобально */
-        ::-webkit-scrollbar {
-            width: 0;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
+        ::-webkit-scrollbar {width: 0;}
+        * {box-sizing: border-box;margin: 0;padding: 0;}
         :root {
             --primary: #2563eb;
             --primary-dark: #1d4ed8;
@@ -1230,7 +1221,7 @@
             }
 
             generatePlantAreaCoordinates() {
-                // Генерируем реалистичные координаты для разных частей растения
+                // Генерируем координаты для разных частей растения
                 const plantParts = [
                     // Листья (верхняя часть)
                     { x: 20, y: 10, width: 15, height: 12 },
@@ -1247,7 +1238,7 @@
                     { x: 70, y: 52, width: 11, height: 16 }
                 ];
                 
-                // Выбираем случайную часть растения
+                // Выбираем часть растения
                 const randomPart = plantParts[Math.floor(Math.random() * plantParts.length)];
                 
                 // Добавляем небольшие случайные отклонения для реализма

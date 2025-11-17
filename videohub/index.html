@@ -404,11 +404,13 @@
             cursor: not-allowed;
         }
 
-        /* Стили для списка устройств - ПОЛНОСТЬЮ ПЕРЕРАБОТАНЫ */
+        /* Стили для списка устройств - ПОЛНОСТЬЮ ПЕРЕРАБОТАНЫ ДЛЯ СТАБИЛЬНОСТИ */
         .devices-section {
             margin-top: 25px;
             padding-top: 20px;
             border-top: 1px solid var(--border);
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .devices-grid {
@@ -416,6 +418,10 @@
             grid-template-columns: 1fr 1fr;
             gap: 15px;
             margin-top: 15px;
+            height: 200px;
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
         }
 
         .device-category {
@@ -423,9 +429,14 @@
             border-radius: 10px;
             padding: 15px;
             border: 1px solid var(--border);
-            height: 180px; /* Фиксированная высота */
+            height: 100%;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
+            max-width: 100%;
         }
 
         .device-category-title {
@@ -436,6 +447,13 @@
             align-items: center;
             gap: 8px;
             flex-shrink: 0;
+            height: 24px;
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .device-list {
@@ -444,6 +462,9 @@
             display: flex;
             flex-direction: column;
             gap: 4px;
+            min-height: 0;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .device-item {
@@ -455,11 +476,12 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            min-height: 32px;
-        }
-
-        .device-item:last-child {
-            margin-bottom: 0;
+            height: 32px;
+            flex-shrink: 0;
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
+            max-width: 100%;
         }
 
         .device-icon {
@@ -468,14 +490,18 @@
             color: var(--primary);
             flex-shrink: 0;
             font-size: 0.8rem;
+            min-width: 16px;
         }
 
         .device-info {
             flex: 1;
             min-width: 0;
+            max-width: calc(100% - 24px);
             display: flex;
             flex-direction: column;
             gap: 1px;
+            overflow: hidden;
+            box-sizing: border-box;
         }
 
         .device-name {
@@ -486,6 +512,9 @@
             text-overflow: ellipsis;
             font-size: 0.8rem;
             line-height: 1.2;
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
         }
 
         .device-id {
@@ -495,6 +524,9 @@
             overflow: hidden;
             text-overflow: ellipsis;
             line-height: 1.1;
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
         }
 
         /* Стили для TensorFlow результатов */
@@ -635,6 +667,14 @@
             
             .devices-grid {
                 grid-template-columns: 1fr;
+                height: 400px;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .device-category {
+                width: 100%;
+                box-sizing: border-box;
             }
             
             .snapshots-grid {
@@ -727,7 +767,7 @@
 
     <!-- Подключение TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-    <!-- Подключение FFmpeg через правильный CDN -->
+    <!-- Подключение FFmpeg через правильный CDН -->
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
     
     <script>
@@ -1225,7 +1265,7 @@
 
                 box.className = `bounding-box ${boxClass}`;
                 
-                // Генерируем координаты для разных частей растения
+                // Генерируем реалистичные координаты для разных частей растения
                 const plantArea = this.generatePlantAreaCoordinates();
                 
                 box.style.left = `${plantArea.x}%`;
@@ -1248,7 +1288,7 @@
             }
 
             generatePlantAreaCoordinates() {
-                // Генерируем координаты для разных частей растения
+                // Генерируем реалистичные координаты для разных частей растения
                 const plantParts = [
                     // Листья (верхняя часть)
                     { x: 20, y: 10, width: 15, height: 12 },
@@ -1265,7 +1305,7 @@
                     { x: 70, y: 52, width: 11, height: 16 }
                 ];
                 
-                // Выбираем часть растения
+                // Выбираем случайную часть растения
                 const randomPart = plantParts[Math.floor(Math.random() * plantParts.length)];
                 
                 // Добавляем небольшие случайные отклонения для реализма

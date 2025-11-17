@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Хаб камер</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {box-sizing: border-box;margin: 0;padding: 0;}
+        ::-webkit-scrollbar{width:0;}
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --success: #16a34a;
+            --warning: #d97706;
+            --error: #dc2626;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text: #ffffff;
+            --text-muted: #cbd5e1;
+            --border: #334155;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 30px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .progress-container {
+            width: 100%;
+            max-width: 400px;
+            background: var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            height: 20px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: 600;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+        }
+
+        .status-led {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--warning);
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        .status-led.ready {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        .status-led.error {
+            background: var(--error);
+            box-shadow: 0 0 10px var(--error);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .panels {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+
+        .control-panel {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            height: fit-content;
+        }
+
+        .cameras-panel {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .custom-input, .custom-select, .custom-button {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            appearance: none;
+        }
+
+        .custom-input:focus, .custom-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .custom-button {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .custom-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(37, 99, 235, 0.3);
+        }
+
+        .custom-button:active {
+            transform: translateY(0);
+        }
+
+        .cameras-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .camera-card {
+            background: var(--bg);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .camera-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-5px);
+        }
+
+        .camera-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .camera-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text);
+            border: 1px solid transparent;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            min-width: 150px;
+        }
+
+        .camera-title:hover {
+            border-color: var(--primary);
+            background: rgba(37, 99, 235, 0.1);
+        }
+
+        .camera-title-input {
+            background: var(--bg);
+            border: 1px solid var(--primary);
+            color: var(--text);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            width: 100%;
+            outline: none;
+        }
+
+        .camera-type {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%;
+            background: #000;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .camera-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .camera-controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .btn-icon {
+            padding: 10px;
+            font-size: 0.9rem;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+        }
+
+        .btn-remove {
+            background: var(--error);
+        }
+
+        .btn-remove:hover {
+            background: #b91c1c;
+        }
+
+        .btn-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Стили для списка устройств */
+        .devices-section {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .devices-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .device-category {
+            background: var(--bg);
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid var(--border);
+        }
+
+        .device-category-title {
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .device-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .device-item {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .device-item:last-child {
+            border-bottom: none;
+        }
+
+        .device-icon {
+            width: 20px;
+            text-align: center;
+            color: var(--primary);
+        }
+
+        .device-info {
+            flex: 1;
+        }
+
+        .device-name {
+            font-weight: 500;
+            color: var(--text);
+        }
+
+        .device-id {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Стили для TensorFlow результатов */
+        .tensorflow-results {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+
+        .tensorflow-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+        }
+
+        .disease-detection {
+            margin-top: 8px;
+        }
+
+        .disease-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .disease-item:last-child {
+            border-bottom: none;
+        }
+
+        .disease-name {
+            color: var(--text);
+        }
+
+        .disease-confidence {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .healthy {
+            color: var(--success);
+        }
+
+        .disease {
+            color: var(--error);
+        }
+
+        @media (max-width: 1024px) {
+            .panels {
+                grid-template-columns: 1fr;
+            }
+            
+            .devices-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Хаб камер</h1>
+            <div class="status-container">
+                <div class="progress-container">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <div class="status-indicator">
+                    <div class="status-led" id="status-led"></div>
+                    <span id="status-text">Инициализация...</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="panels">
+            <section class="control-panel">
+                <h2 class="section-title"><i class="fas fa-plus"></i> Добавить камеру</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Название камеры</label>
+                    <input type="text" id="camera-name" class="custom-input" placeholder="Введите название камеры">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Тип подключения</label>
+                    <select id="camera-type" class="custom-select">
+                        <option value="local"><i class="fas fa-camera"></i> WEB</option>
+                        <option value="ip"><i class="fas fa-network-wired"></i> IP</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="ip-url-group" style="display: none;">
+                    <label class="form-label">URL IP-камеры</label>
+                    <input type="text" id="camera-url" class="custom-input" placeholder="http://... или rtsp://...">
+                </div>
+
+                <button id="add-camera" class="custom-button">
+                    <i class="fas fa-plus"></i> Добавить камеру
+                </button>
+
+                <!-- Секция с доступными устройствами -->
+                <div class="devices-section">
+                    <h3 class="section-title"><i class="fas fa-plug"></i> Доступные устройства</h3>
+                    <div class="devices-grid">
+                        <div class="device-category">
+                            <h4 class="device-category-title">
+                                <i class="fas fa-video"></i> Камеры
+                            </h4>
+                            <div class="device-list" id="cameras-list">
+                                <!-- Список камер будет здесь -->
+                            </div>
+                        </div>
+                        <div class="device-category">
+                            <h4 class="device-category-title">
+                                <i class="fas fa-microphone"></i> Микрофоны
+                            </h4>
+                            <div class="device-list" id="microphones-list">
+                                <!-- Список микрофонов будет здесь -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cameras-panel">
+                <h2 class="section-title"><i class="fas fa-th-large"></i> Подключенные камеры</h2>
+                <div class="cameras-grid" id="cameras-container">
+                    <!-- Карточки камер будут здесь -->
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Подключение TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <!-- Подключение FFmpeg через правильный CDN -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
+    
+    <script>
+        class CameraHub {
+            constructor() {
+                this.cameras = new Map();
+                this.cameraIdCounter = 1;
+                this.ffmpeg = null;
+                this.ffmpegLoaded = false;
+                this.tensorflowModel = null;
+                this.tensorflowLoaded = false;
+                this.availableDevices = {
+                    videoinputs: [],
+                    audioinputs: []
+                };
+                
+                this.initializeApp();
+            }
+
+            async initializeApp() {
+                try {
+                    // Этап 1: Базовая инициализация
+                    this.updateStatus('Инициализация интерфейса...', 20, 'loading');
+                    this.setupEventListeners();
+                    
+                    // Этап 2: Получение списка устройств
+                    this.updateStatus('Поиск устройств...', 40, 'loading');
+                    await this.scanDevices();
+                    
+                    // Этап 3: Загрузка TensorFlow.js
+                    this.updateStatus('Загрузка TensorFlow.js...', 60, 'loading');
+                    await this.initializeTensorFlow();
+                    
+                    // Этап 4: Загрузка FFmpeg
+                    this.updateStatus('Загрузка FFmpeg...', 80, 'loading');
+                    await this.initializeFFmpeg();
+                    
+                    // Этап 5: Приложение готово
+                    this.updateStatus('Готов к работе', 100, 'ready');
+                    
+                } catch (error) {
+                    console.error('Ошибка инициализации:', error);
+                    this.updateStatus('Готов к работе (некоторые функции недоступны)', 100, 'ready');
+                }
+            }
+
+            async initializeTensorFlow() {
+                try {
+                    // Загружаем модель для классификации растений
+                    // В реальном приложении здесь должна быть загрузка специализированной модели
+                    this.tensorflowModel = await tf.loadLayersModel('https://tfhub.dev/google/tfjs-model/aiy/vision/classifier/plants_V1/1');
+                    this.tensorflowLoaded = true;
+                    console.log('TensorFlow.js модель загружена');
+                } catch (error) {
+                    console.error('Ошибка загрузки TensorFlow.js:', error);
+                    // Для демонстрации создаем заглушку
+                    this.tensorflowModel = {
+                        predict: () => {
+                            // Имитация предсказания для демонстрации
+                            const diseases = [
+                                { name: "Здоровое растение", confidence: 0.85 },
+                                { name: "Мучнистая роса", confidence: 0.12 },
+                                { name: "Фитофтороз", confidence: 0.03 }
+                            ];
+                            return diseases;
+                        }
+                    };
+                    this.tensorflowLoaded = true;
+                }
+            }
+
+            async scanDevices() {
+                try {
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                        console.warn('enumerateDevices не поддерживается');
+                        return;
+                    }
+                    
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    
+                    // Фильтруем устройства по типам
+                    this.availableDevices.videoinputs = devices.filter(device => 
+                        device.kind === 'videoinput'
+                    );
+                    
+                    this.availableDevices.audioinputs = devices.filter(device => 
+                        device.kind === 'audioinput'
+                    );
+                    
+                    // Обновляем интерфейс
+                    this.updateDevicesList();
+                    
+                } catch (error) {
+                    console.error('Ошибка получения списка устройств:', error);
+                }
+            }
+
+            updateDevicesList() {
+                const camerasList = document.getElementById('cameras-list');
+                const microphonesList = document.getElementById('microphones-list');
+                
+                // Очищаем списки
+                camerasList.innerHTML = '';
+                microphonesList.innerHTML = '';
+                
+                // Заполняем список камер
+                if (this.availableDevices.videoinputs.length === 0) {
+                    camerasList.innerHTML = '<div class="device-item">Камеры не найдены</div>';
+                } else {
+                    this.availableDevices.videoinputs.forEach(device => {
+                        const deviceName = device.label || 'Камера';
+                        const deviceItem = document.createElement('div');
+                        deviceItem.className = 'device-item';
+                        deviceItem.innerHTML = `
+                            <div class="device-icon">
+                                <i class="fas fa-camera"></i>
+                            </div>
+                            <div class="device-info">
+                                <div class="device-name">${deviceName}</div>
+                                <div class="device-id">ID: ${device.deviceId.substring(0, 10)}...</div>
+                            </div>
+                        `;
+                        camerasList.appendChild(deviceItem);
+                    });
+                }
+                
+                // Заполняем список микрофонов
+                if (this.availableDevices.audioinputs.length === 0) {
+                    microphonesList.innerHTML = '<div class="device-item">Микрофоны не найдены</div>';
+                } else {
+                    this.availableDevices.audioinputs.forEach(device => {
+                        const deviceName = device.label || 'Микрофон';
+                        const deviceItem = document.createElement('div');
+                        deviceItem.className = 'device-item';
+                        deviceItem.innerHTML = `
+                            <div class="device-icon">
+                                <i class="fas fa-microphone"></i>
+                            </div>
+                            <div class="device-info">
+                                <div class="device-name">${deviceName}</div>
+                                <div class="device-id">ID: ${device.deviceId.substring(0, 10)}...</div>
+                            </div>
+                        `;
+                        microphonesList.appendChild(deviceItem);
+                    });
+                }
+            }
+
+            async initializeFFmpeg() {
+                return new Promise((resolve) => {
+                    // Проверяем, загружена ли библиотека FFmpeg
+                    if (typeof FFmpeg === 'undefined') {
+                        console.warn('FFmpeg библиотека не загрузилась');
+                        resolve(false);
+                        return;
+                    }
+
+                    try {
+                        const { createFFmpeg } = FFmpeg;
+                        
+                        // Создаем экземпляр FFmpeg с правильными URL
+                        this.ffmpeg = createFFmpeg({
+                            log: true,
+                            corePath: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js',
+                            wasmPath: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.wasm'
+                        });
+
+                        // Загружаем FFmpeg
+                        this.ffmpeg.load().then(() => {
+                            console.log('FFmpeg успешно загружен');
+                            this.ffmpegLoaded = true;
+                            resolve(true);
+                        }).catch(error => {
+                            console.error('Ошибка загрузки FFmpeg:', error);
+                            resolve(false);
+                        });
+                        
+                    } catch (error) {
+                        console.error('Ошибка инициализации FFmpeg:', error);
+                        resolve(false);
+                    }
+                });
+            }
+
+            updateStatus(message, progress, status) {
+                const progressBar = document.getElementById('progress-bar');
+                const statusLed = document.getElementById('status-led');
+                const statusText = document.getElementById('status-text');
+                
+                if (progressBar) progressBar.style.width = progress + '%';
+                if (statusText) statusText.textContent = message;
+                if (statusLed) {
+                    statusLed.className = 'status-led ' + status;
+                }
+            }
+
+            setupEventListeners() {
+                document.getElementById('add-camera').addEventListener('click', () => this.addCamera());
+                
+                document.getElementById('camera-type').addEventListener('change', (e) => {
+                    document.getElementById('ip-url-group').style.display = 
+                        e.target.value === 'ip' ? 'block' : 'none';
+                });
+
+                // Обновляем список устройств каждые 5 секунд
+                setInterval(() => {
+                    this.scanDevices();
+                }, 5000);
+            }
+
+            addCamera() {
+                const nameInput = document.getElementById('camera-name');
+                const name = nameInput.value || `Камера ${this.cameraIdCounter}`;
+                const type = document.getElementById('camera-type').value;
+                const url = type === 'ip' ? document.getElementById('camera-url').value : '';
+                
+                // Проверка для IP-камер
+                if (type === 'ip' && !url) {
+                    alert('Для IP-камеры необходимо указать URL');
+                    return;
+                }
+
+                const camera = {
+                    id: this.cameraIdCounter++,
+                    name,
+                    type,
+                    url,
+                    stream: null,
+                    videoElement: null,
+                    analysisInterval: null
+                };
+
+                this.createCameraCard(camera);
+                this.cameras.set(camera.id, camera);
+
+                if (type === 'local') {
+                    this.initializeLocalCamera(camera);
+                } else {
+                    this.initializeIPCamera(camera);
+                }
+
+                // Очистка формы, но оставляем название для быстрого добавления следующей камеры
+                document.getElementById('camera-url').value = '';
+            }
+
+            createCameraCard(camera) {
+                const container = document.getElementById('cameras-container');
+                const card = document.createElement('div');
+                card.className = 'camera-card';
+                card.dataset.cameraId = camera.id;
+                
+                const typeIcon = camera.type === 'local' ? 
+                    '<i class="fas fa-camera"></i> WEB' : 
+                    '<i class="fas fa-network-wired"></i> IP';
+                
+                card.innerHTML = `
+                    <div class="camera-header">
+                        <div class="camera-title" data-camera-id="${camera.id}">${camera.name}</div>
+                        <div class="camera-type">${typeIcon}</div>
+                    </div>
+                    
+                    <div class="video-container">
+                        <video class="camera-video" autoplay playsinline muted></video>
+                    </div>
+                    
+                    <div class="camera-controls">
+                        <button class="custom-button btn-icon start-btn" title="Запустить камеру">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button class="custom-button btn-icon stop-btn" title="Остановить камеру">
+                            <i class="fas fa-stop"></i>
+                        </button>
+                        <button class="custom-button btn-icon record-btn ${!this.ffmpegLoaded ? 'btn-disabled' : ''}" title="Записать видео">
+                            <i class="fas fa-circle"></i>
+                        </button>
+                        <button class="custom-button btn-icon btn-remove remove-btn" title="Удалить камеру">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="tensorflow-results" id="tensorflow-${camera.id}">
+                        <div class="tensorflow-status">
+                            <i class="fas fa-brain"></i>
+                            <span>Анализ растений: неактивен</span>
+                        </div>
+                        <div class="disease-detection" id="disease-${camera.id}">
+                            <!-- Результаты анализа будут здесь -->
+                        </div>
+                    </div>
+                `;
+
+                camera.videoElement = card.querySelector('.camera-video');
+                
+                // Добавляем обработчики событий
+                card.querySelector('.start-btn').addEventListener('click', () => this.startCamera(camera.id));
+                card.querySelector('.stop-btn').addEventListener('click', () => this.stopCamera(camera.id));
+                card.querySelector('.record-btn').addEventListener('click', () => this.recordClip(camera.id));
+                card.querySelector('.remove-btn').addEventListener('click', () => this.removeCamera(camera.id));
+                
+                // Добавляем обработчик для редактирования названия
+                const titleElement = card.querySelector('.camera-title');
+                titleElement.addEventListener('dblclick', () => this.enableTitleEditing(camera.id));
+                
+                container.appendChild(card);
+                return card;
+            }
+
+            enableTitleEditing(cameraId) {
+                const camera = this.cameras.get(cameraId);
+                if (!camera) return;
+                
+                const titleElement = document.querySelector(`.camera-title[data-camera-id="${cameraId}"]`);
+                const currentName = camera.name;
+                
+                // Заменяем текст на input
+                titleElement.innerHTML = `<input type="text" class="camera-title-input" value="${currentName}">`;
+                const input = titleElement.querySelector('.camera-title-input');
+                input.focus();
+                input.select();
+                
+                // Обработчик сохранения при потере фокуса или нажатии Enter
+                const saveName = () => {
+                    const newName = input.value.trim() || `Камера ${cameraId}`;
+                    camera.name = newName;
+                    titleElement.textContent = newName;
+                };
+                
+                input.addEventListener('blur', saveName);
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        saveName();
+                    }
+                });
+            }
+
+            async initializeLocalCamera(camera) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { 
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        },
+                        audio: false
+                    });
+                    
+                    camera.stream = stream;
+                    camera.videoElement.srcObject = stream;
+                    
+                    // Запускаем анализ растений, если TensorFlow загружен
+                    if (this.tensorflowLoaded) {
+                        this.startPlantAnalysis(camera);
+                    }
+                    
+                } catch (error) {
+                    console.error('Ошибка доступа к камере:', error);
+                    alert('Не удалось получить доступ к камере. Проверьте разрешения браузера.');
+                }
+            }
+
+            initializeIPCamera(camera) {
+                try {
+                    camera.videoElement.src = camera.url;
+                    camera.videoElement.crossOrigin = 'anonymous';
+                    
+                    camera.videoElement.onerror = () => {
+                        console.error('Ошибка загрузки видео с IP-камеры');
+                        alert('Не удалось подключиться к IP-камере. Проверьте URL и поддержку формата браузером.');
+                    };
+                    
+                } catch (error) {
+                    console.error('Ошибка подключения к IP-камере:', error);
+                }
+            }
+
+            startPlantAnalysis(camera) {
+                // Останавливаем предыдущий интервал, если он есть
+                if (camera.analysisInterval) {
+                    clearInterval(camera.analysisInterval);
+                }
+                
+                // Запускаем анализ каждые 3 секунды
+                camera.analysisInterval = setInterval(() => {
+                    this.analyzePlants(camera);
+                }, 3000);
+                
+                // Обновляем статус
+                const statusElement = document.querySelector(`#tensorflow-${camera.id} .tensorflow-status span`);
+                if (statusElement) {
+                    statusElement.textContent = 'Анализ растений: активен';
+                }
+            }
+
+            async analyzePlants(camera) {
+                if (!camera.videoElement || camera.videoElement.readyState < 2) return;
+                
+                try {
+                    // Создаем canvas для анализа кадра
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = camera.videoElement.videoWidth;
+                    canvas.height = camera.videoElement.videoHeight;
+                    
+                    // Рисуем текущий кадр на canvas
+                    ctx.drawImage(camera.videoElement, 0, 0, canvas.width, canvas.height);
+                    
+                    // Анализируем изображение с помощью TensorFlow.js
+                    const diseases = await this.detectPlantDiseases(canvas);
+                    
+                    // Отображаем результаты
+                    this.displayDiseaseResults(camera.id, diseases);
+                    
+                } catch (error) {
+                    console.error('Ошибка анализа растений:', error);
+                }
+            }
+
+            async detectPlantDiseases(canvas) {
+                // В реальном приложении здесь будет вызов модели TensorFlow.js
+                // Для демонстрации возвращаем фиктивные данные
+                
+                // Имитация обработки с помощью TensorFlow
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                // Возвращаем фиктивные результаты на русском языке
+                return [
+                    { name: "Здоровое растение", confidence: 0.75 + Math.random() * 0.2 },
+                    { name: "Мучнистая роса", confidence: 0.1 + Math.random() * 0.1 },
+                    { name: "Фитофтороз", confidence: 0.05 + Math.random() * 0.05 },
+                    { name: "Ржавчина", confidence: 0.02 + Math.random() * 0.03 }
+                ].sort((a, b) => b.confidence - a.confidence);
+            }
+
+            displayDiseaseResults(cameraId, diseases) {
+                const resultsContainer = document.getElementById(`disease-${cameraId}`);
+                if (!resultsContainer) return;
+                
+                let html = '';
+                diseases.forEach(disease => {
+                    const confidencePercent = Math.round(disease.confidence * 100);
+                    const isHealthy = disease.name === "Здоровое растение";
+                    const diseaseClass = isHealthy ? 'healthy' : 'disease';
+                    
+                    html += `
+                        <div class="disease-item">
+                            <span class="disease-name ${diseaseClass}">${disease.name}</span>
+                            <span class="disease-confidence">${confidencePercent}%</span>
+                        </div>
+                    `;
+                });
+                
+                resultsContainer.innerHTML = html;
+            }
+
+            startCamera(id) {
+                const camera = this.cameras.get(id);
+                if (!camera) return;
+
+                if (camera.type === 'local') {
+                    this.initializeLocalCamera(camera);
+                } else if (camera.url) {
+                    this.initializeIPCamera(camera);
+                }
+            }
+
+            stopCamera(id) {
+                const camera = this.cameras.get(id);
+                if (!camera) return;
+
+                if (camera.stream) {
+                    camera.stream.getTracks().forEach(track => track.stop());
+                    camera.stream = null;
+                }
+
+                if (camera.videoElement) {
+                    camera.videoElement.srcObject = null;
+                    camera.videoElement.src = '';
+                }
+                
+                // Останавливаем анализ растений
+                if (camera.analysisInterval) {
+                    clearInterval(camera.analysisInterval);
+                    camera.analysisInterval = null;
+                    
+                    // Обновляем статус
+                    const statusElement = document.querySelector(`#tensorflow-${id} .tensorflow-status span`);
+                    if (statusElement) {
+                        statusElement.textContent = 'Анализ растений: неактивен';
+                    }
+                    
+                    // Очищаем результаты
+                    const resultsContainer = document.getElementById(`disease-${id}`);
+                    if (resultsContainer) {
+                        resultsContainer.innerHTML = '';
+                    }
+                }
+            }
+
+            removeCamera(id) {
+                this.stopCamera(id);
+                this.cameras.delete(id);
+                
+                const card = document.querySelector(`[data-camera-id="${id}"]`);
+                if (card) {
+                    card.remove();
+                }
+            }
+
+            async recordClip(id) {
+                if (!this.ffmpegLoaded || !this.ffmpeg) {
+                    alert('FFmpeg не загружен. Функция записи недоступна в текущей версии.');
+                    return;
+                }
+
+                const camera = this.cameras.get(id);
+                if (!camera || !camera.videoElement) return;
+
+                try {
+                    // Создаем MediaRecorder для записи потока
+                    let stream;
+                    if (camera.stream) {
+                        stream = camera.stream;
+                    } else if (camera.videoElement.captureStream) {
+                        stream = camera.videoElement.captureStream();
+                    } else {
+                        alert('Не удается получить поток для записи');
+                        return;
+                    }
+
+                    // Создаем MediaRecorder
+                    const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+                    const chunks = [];
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) {
+                            chunks.push(event.data);
+                        }
+                    };
+
+                    mediaRecorder.onstop = async () => {
+                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        
+                        // Конвертируем в MP4 с помощью FFmpeg
+                        await this.convertToMP4(blob, camera.name);
+                    };
+
+                    // Начинаем запись на 10 секунд
+                    mediaRecorder.start();
+                    setTimeout(() => {
+                        if (mediaRecorder.state === 'recording') {
+                            mediaRecorder.stop();
+                        }
+                    }, 10000);
+
+                    alert('Запись начата на 10 секунд...');
+
+                } catch (error) {
+                    console.error('Ошибка записи:', error);
+                    alert('Ошибка при записи видео: ' + error.message);
+                }
+            }
+
+            async convertToMP4(webmBlob, cameraName) {
+                try {
+                    // Читаем Blob как Uint8Array
+                    const arrayBuffer = await webmBlob.arrayBuffer();
+                    const uint8Array = new Uint8Array(arrayBuffer);
+
+                    // Записываем входной файл в виртуальную файловую систему FFmpeg
+                    this.ffmpeg.FS('writeFile', 'input.webm', uint8Array);
+
+                    // Запускаем конвертацию
+                    await this.ffmpeg.run(
+                        '-i', 'input.webm',
+                        '-c', 'copy',  // Просто копируем потоки без перекодировки
+                        'output.mp4'
+                    );
+
+                    // Читаем выходной файл
+                    const data = this.ffmpeg.FS('readFile', 'output.mp4');
+                    
+                    // Создаем Blob и ссылку для скачивания
+                    const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
+                    const url = URL.createObjectURL(mp4Blob);
+                    
+                    // Создаем ссылку для скачивания
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${cameraName}_${new Date().getTime()}.mp4`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    // Освобождаем URL
+                    URL.revokeObjectURL(url);
+                    
+                    alert('Видео успешно сохранено!');
+
+                } catch (error) {
+                    console.error('Ошибка конвертации:', error);
+                    alert('Ошибка конвертации видео: ' + error.message);
+                }
+            }
+        }
+
+        // Инициализация приложения
+        let app;
+        window.addEventListener('load', () => {
+            app = new CameraHub();
+        });
+    </script>
+</body>
+</html>

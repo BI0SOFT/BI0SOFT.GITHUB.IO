@@ -6,12 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
+        * {box-sizing: border-box;margin: 0;padding: 0;}
+        ::-webkit-scrollbar{width:0;}
         :root {
             --primary: #2563eb;
             --primary-dark: #1d4ed8;
@@ -270,30 +266,6 @@
             background: #b91c1c;
         }
 
-        .device-list {
-            max-height: 200px;
-            overflow-y: auto;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 10px;
-            background: var(--bg);
-        }
-
-        .device-item {
-            padding: 8px;
-            border-bottom: 1px solid var(--border);
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .device-item:hover {
-            background: var(--primary-dark);
-        }
-
-        .device-item:last-child {
-            border-bottom: none;
-        }
-
         @media (max-width: 1024px) {
             .panels {
                 grid-template-columns: 1fr;
@@ -333,7 +305,7 @@
                     </select>
                 </div>
 
-                <div class="form-group" id="ip-url-group">
+                <div class="form-group" id="ip-url-group" style="display: none;">
                     <label class="form-label">URL IP-камеры</label>
                     <input type="text" id="camera-url" class="custom-input" placeholder="http://... или rtsp://...">
                 </div>
@@ -362,56 +334,84 @@
 
             async initializeApp() {
                 try {
-                    // Шаг 1: Инициализация интерфейса
-                    this.updateStatus('Загрузка интерфейса...', 25, 'loading');
+                    // Этап 1: Базовая инициализация
+                    this.updateStatus('Инициализация интерфейса...', 25, 'loading');
                     this.setupEventListeners();
                     
-                    // Шаг 2: Загрузка FFmpeg
-                    this.updateStatus('Загрузка FFmpeg...', 50, 'loading');
-                    await this.initializeFFmpeg();
+                    // Этап 2: Проверка доступности медиа-устройств
+                    this.updateStatus('Проверка устройств...', 50, 'loading');
+                    await this.checkMediaDevices();
                     
-                    // Шаг 3: Сканирование устройств
-                    this.updateStatus('Сканирование устройств...', 75, 'loading');
-                    await this.scanDevices();
+                    // Этап 3: Попытка загрузки FFmpeg (неблокирующая)
+                    this.updateStatus('Загрузка FFmpeg...', 75, 'loading');
+                    await this.tryLoadFFmpeg();
                     
-                    // Шаг 4: Готовность
+                    // Этап 4: Приложение готово
                     this.updateStatus('Готов к работе', 100, 'ready');
                     
                 } catch (error) {
                     console.error('Ошибка инициализации:', error);
-                    this.updateStatus('Ошибка инициализации', 100, 'error');
+                    this.updateStatus('Готов к работе (FFmpeg недоступен)', 100, 'ready');
                 }
             }
 
-            async initializeFFmpeg() {
-                return new Promise((resolve, reject) => {
-                    // Проверяем, есть ли уже FFmpeg в глобальной области
-                    if (window.FFmpeg) {
-                        console.log('FFmpeg уже загружен');
-                        resolve();
-                        return;
-                    }
+            async tryLoadFFmpeg() {
+                return new Promise((resolve) => {
+                    // Пробуем разные источники для FFmpeg
+                    const sources = [
+                        'https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js',
+                        'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js'
+                    ];
 
-                    // Создаем скрипт для загрузки FFmpeg
-                    const script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/ffmpeg.min.js';
+                    let attempts = 0;
                     
-                    script.onload = () => {
-                        if (typeof FFmpeg !== 'undefined') {
-                            console.log('FFmpeg успешно загружен');
-                            this.ffmpegLoaded = true;
-                            resolve();
-                        } else {
-                            reject(new Error('FFmpeg не загрузился корректно'));
+                    const tryNextSource = () => {
+                        if (attempts >= sources.length) {
+                            console.warn('Не удалось загрузить FFmpeg ни из одного источника');
+                            resolve(false);
+                            return;
                         }
+
+                        const script = document.createElement('script');
+                        script.src = sources[attempts];
+                        
+                        script.onload = () => {
+                            if (typeof FFmpeg !== 'undefined') {
+                                console.log('FFmpeg успешно загружен из:', sources[attempts]);
+                                this.ffmpegLoaded = true;
+                                resolve(true);
+                            } else {
+                                attempts++;
+                                tryNextSource();
+                            }
+                        };
+                        
+                        script.onerror = () => {
+                            attempts++;
+                            tryNextSource();
+                        };
+                        
+                        document.head.appendChild(script);
                     };
-                    
-                    script.onerror = () => {
-                        reject(new Error('Не удалось загрузить FFmpeg'));
-                    };
-                    
-                    document.head.appendChild(script);
+
+                    tryNextSource();
                 });
+            }
+
+            async checkMediaDevices() {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('MediaDevices API не поддерживается');
+                }
+                
+                try {
+                    // Проверяем доступ к камере
+                    await navigator.mediaDevices.getUserMedia({ video: true });
+                    return true;
+                } catch (error) {
+                    console.warn('Нет доступа к камере:', error);
+                    // Продолжаем работу, но предупреждаем пользователя
+                    return false;
+                }
             }
 
             updateStatus(message, progress, status) {
@@ -426,24 +426,6 @@
                 }
             }
 
-            async scanDevices() {
-                try {
-                    if (!navigator.mediaDevices?.enumerateDevices) {
-                        console.warn('enumerateDevices не поддерживается');
-                        return;
-                    }
-                    
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                    const audioDevices = devices.filter(device => device.kind === 'audioinput');
-                    
-                    console.log(`Найдено устройств: ${videoDevices.length} камер, ${audioDevices.length} микрофонов`);
-                    
-                } catch (error) {
-                    console.error('Ошибка сканирования устройств:', error);
-                }
-            }
-
             setupEventListeners() {
                 document.getElementById('add-camera').addEventListener('click', () => this.addCamera());
                 
@@ -451,9 +433,6 @@
                     document.getElementById('ip-url-group').style.display = 
                         e.target.value === 'ip' ? 'block' : 'none';
                 });
-
-                // Скрываем IP URL по умолчанию
-                document.getElementById('ip-url-group').style.display = 'none';
             }
 
             addCamera() {
@@ -461,6 +440,12 @@
                 const type = document.getElementById('camera-type').value;
                 const url = type === 'ip' ? document.getElementById('camera-url').value : '';
                 
+                // Проверка для IP-камер
+                if (type === 'ip' && !url) {
+                    alert('Для IP-камеры необходимо указать URL');
+                    return;
+                }
+
                 const camera = {
                     id: this.cameraIdCounter++,
                     name,
@@ -475,7 +460,7 @@
 
                 if (type === 'local') {
                     this.initializeLocalCamera(camera);
-                } else if (url) {
+                } else {
                     this.initializeIPCamera(camera);
                 }
 
@@ -507,7 +492,7 @@
                     <div class="camera-controls">
                         <button class="custom-button btn-small start-btn">Старт</button>
                         <button class="custom-button btn-small stop-btn">Стоп</button>
-                        <button class="custom-button btn-small record-btn" ${!this.ffmpegLoaded ? 'disabled' : ''}>Запись</button>
+                        <button class="custom-button btn-small record-btn" ${!this.ffmpegLoaded ? 'disabled style="opacity:0.5"' : ''}>Запись</button>
                         <button class="custom-button btn-small btn-remove remove-btn">Удалить</button>
                     </div>
                 `;
@@ -526,11 +511,6 @@
 
             async initializeLocalCamera(camera) {
                 try {
-                    if (!navigator.mediaDevices?.getUserMedia) {
-                        console.error('getUserMedia не поддерживается');
-                        return;
-                    }
-
                     const stream = await navigator.mediaDevices.getUserMedia({
                         video: { 
                             width: { ideal: 1280 },
@@ -544,23 +524,18 @@
                     
                 } catch (error) {
                     console.error('Ошибка доступа к камере:', error);
-                    alert('Не удалось получить доступ к камере. Проверьте разрешения.');
+                    alert('Не удалось получить доступ к камере. Проверьте разрешения браузера.');
                 }
             }
 
             initializeIPCamera(camera) {
-                if (!camera.url) {
-                    alert('Для IP-камеры требуется URL');
-                    return;
-                }
-
                 try {
                     camera.videoElement.src = camera.url;
                     camera.videoElement.crossOrigin = 'anonymous';
                     
                     camera.videoElement.onerror = () => {
                         console.error('Ошибка загрузки видео с IP-камеры');
-                        alert('Не удалось подключиться к IP-камере. Проверьте URL.');
+                        alert('Не удалось подключиться к IP-камере. Проверьте URL и поддержку формата браузером.');
                     };
                     
                 } catch (error) {
@@ -606,7 +581,7 @@
 
             async recordClip(id) {
                 if (!this.ffmpegLoaded) {
-                    alert('FFmpeg не загружен. Функция записи недоступна.');
+                    alert('FFmpeg не загружен. Функция записи недоступна в текущей версии.');
                     return;
                 }
 
@@ -614,11 +589,9 @@
                 if (!camera || !camera.videoElement) return;
 
                 try {
-                    // Здесь будет реализация записи через FFmpeg
-                    alert('Функция записи будет реализована после полной загрузки FFmpeg');
+                    alert('Функция записи будет доступна после полной загрузки FFmpeg');
                 } catch (error) {
                     console.error('Ошибка записи:', error);
-                    alert('Ошибка при записи видео');
                 }
             }
         }
